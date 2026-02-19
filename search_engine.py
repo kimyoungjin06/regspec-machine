@@ -45,6 +45,14 @@ def _stable_seed(base_seed: int, token: str) -> int:
     return int(base_seed + (int(hx[:8], 16) % 1_000_000))
 
 
+def _equivalence_hash(
+    *, track: str, context_scope: str, y_col: str, exog_cols: Sequence[str]
+) -> str:
+    normalized_exog = sorted({str(c).strip() for c in exog_cols if str(c).strip()})
+    token = f"{track}|{context_scope}|{y_col}|{','.join(normalized_exog)}"
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
 def _count_two_alt_events(df: pd.DataFrame) -> int:
     return int((df.groupby("event_id", dropna=False).size() == 2).sum())
 
@@ -134,6 +142,9 @@ def _build_row(
         "candidate_tier": "exploratory",
         "validation_used_for_search": int(bool(config.validation_used_for_search)),
         "candidate_pool_locked_pre_validation": int(bool(config.candidate_pool_locked_pre_validation)),
+        "candidate_eval_order": None,
+        "candidate_pool_size": None,
+        "equivalence_hash": "",
     }
 
 
@@ -609,6 +620,8 @@ def run_key_factor_scan(
     split_id = str(df["split_id"].dropna().astype(str).iloc[0]) if "split_id" in df.columns else ""
 
     candidate_plan: List[Dict[str, object]] = []
+    skipped_candidates: List[Dict[str, object]] = []
+    eq_seen: Dict[str, str] = {}
     track_split_cache: Dict[Tuple[str, str], pd.DataFrame] = {}
     for track in tracks:
         track_df = df[df["track"].astype(str) == track].copy()
@@ -620,6 +633,26 @@ def run_key_factor_scan(
                 for feature in allowed_features:
                     exog_cols = [feature, *[c for c in controls if c != feature]]
                     candidate_id = f"{track}|{context_scope}|{spec_id}|{feature}"
+                    equivalence_hash = _equivalence_hash(
+                        track=track,
+                        context_scope=context_scope,
+                        y_col=y_col,
+                        exog_cols=exog_cols,
+                    )
+                    if equivalence_hash in eq_seen:
+                        skipped_candidates.append(
+                            {
+                                "candidate_id": candidate_id,
+                                "duplicate_of_candidate_id": eq_seen[equivalence_hash],
+                                "equivalence_hash": equivalence_hash,
+                                "track": track,
+                                "context_scope": context_scope,
+                                "spec_id": spec_id,
+                                "key_factor": feature,
+                            }
+                        )
+                        continue
+                    eq_seen[equivalence_hash] = candidate_id
                     candidate_plan.append(
                         {
                             "track": track,
@@ -630,14 +663,18 @@ def run_key_factor_scan(
                             "exog_cols": exog_cols,
                             "fdr_family_id": fdr_family_id,
                             "candidate_id": candidate_id,
+                            "equivalence_hash": equivalence_hash,
                         }
                     )
+    candidate_pool_size = len(candidate_plan)
 
     # Holdout-leakage guard: freeze candidate pool and evaluate discovery first.
     scan_rows: List[Dict[str, object]] = []
+    candidate_eval_order = 0
     for spec in candidate_plan:
         split_role = "discovery"
         split_df = track_split_cache[(str(spec["track"]), split_role)]
+        candidate_eval_order += 1
         row = _scan_one_split(
             df=split_df,
             y_col=str(spec["y_col"]),
@@ -653,10 +690,14 @@ def run_key_factor_scan(
             candidate_id=str(spec["candidate_id"]),
             config=config,
         )
+        row["candidate_eval_order"] = candidate_eval_order
+        row["candidate_pool_size"] = candidate_pool_size
+        row["equivalence_hash"] = str(spec["equivalence_hash"])
         scan_rows.append(row)
     for spec in candidate_plan:
         split_role = "validation"
         split_df = track_split_cache[(str(spec["track"]), split_role)]
+        candidate_eval_order += 1
         row = _scan_one_split(
             df=split_df,
             y_col=str(spec["y_col"]),
@@ -672,6 +713,9 @@ def run_key_factor_scan(
             candidate_id=str(spec["candidate_id"]),
             config=config,
         )
+        row["candidate_eval_order"] = candidate_eval_order
+        row["candidate_pool_size"] = candidate_pool_size
+        row["equivalence_hash"] = str(spec["equivalence_hash"])
         scan_rows.append(row)
 
     validation_rows = [
@@ -746,6 +790,10 @@ def run_key_factor_scan(
                 "not_replacing_confirmatory_claim": 1,
                 "validation_used_for_search": int(bool(config.validation_used_for_search)),
                 "candidate_pool_locked_pre_validation": int(bool(config.candidate_pool_locked_pre_validation)),
+                "candidate_pool_size": ref.get("candidate_pool_size"),
+                "equivalence_hash": ref.get("equivalence_hash"),
+                "candidate_eval_order_discovery": disc.get("candidate_eval_order") if disc else None,
+                "candidate_eval_order_validation": val.get("candidate_eval_order") if val else None,
                 "data_hash": config.data_hash,
                 "config_hash": config.config_hash,
                 "feature_registry_hash": config.feature_registry_hash,
@@ -763,25 +811,53 @@ def run_key_factor_scan(
         )
     )
 
-    search_log_rows = [
-        {
-            "run_id": row.get("run_id"),
-            "candidate_id": row.get("candidate_id"),
-            "track": row.get("track"),
-            "context_scope": row.get("context_scope"),
-            "split_role": row.get("split_role"),
-            "spec_id": row.get("spec_id"),
-            "key_factor": row.get("key_factor"),
-            "status": row.get("status"),
-            "reason_stage": row.get("reason_stage"),
-            "reason_code": row.get("reason_code"),
-            "reason_detail": row.get("reason_detail"),
-            "bootstrap_success": row.get("bootstrap_success"),
-            "bootstrap_attempted": row.get("bootstrap_attempted"),
-            "validation_used_for_search": row.get("validation_used_for_search"),
-            "candidate_pool_locked_pre_validation": row.get("candidate_pool_locked_pre_validation"),
-            "timestamp": row.get("timestamp"),
-        }
-        for row in scan_rows
-    ]
+    search_log_rows: List[Dict[str, object]] = []
+    for row in scan_rows:
+        search_log_rows.append(
+            {
+                "run_id": row.get("run_id"),
+                "candidate_id": row.get("candidate_id"),
+                "track": row.get("track"),
+                "context_scope": row.get("context_scope"),
+                "split_role": row.get("split_role"),
+                "spec_id": row.get("spec_id"),
+                "key_factor": row.get("key_factor"),
+                "status": row.get("status"),
+                "reason_stage": row.get("reason_stage"),
+                "reason_code": row.get("reason_code"),
+                "reason_detail": row.get("reason_detail"),
+                "bootstrap_success": row.get("bootstrap_success"),
+                "bootstrap_attempted": row.get("bootstrap_attempted"),
+                "candidate_eval_order": row.get("candidate_eval_order"),
+                "candidate_pool_size": row.get("candidate_pool_size"),
+                "equivalence_hash": row.get("equivalence_hash"),
+                "validation_used_for_search": row.get("validation_used_for_search"),
+                "candidate_pool_locked_pre_validation": row.get("candidate_pool_locked_pre_validation"),
+                "timestamp": row.get("timestamp"),
+            }
+        )
+    for skipped in skipped_candidates:
+        search_log_rows.append(
+            {
+                "run_id": config.run_id,
+                "candidate_id": skipped.get("candidate_id"),
+                "track": skipped.get("track"),
+                "context_scope": skipped.get("context_scope"),
+                "split_role": "plan",
+                "spec_id": skipped.get("spec_id"),
+                "key_factor": skipped.get("key_factor"),
+                "status": "skipped_equivalent_spec",
+                "reason_stage": "plan",
+                "reason_code": "skipped_equivalent_spec",
+                "reason_detail": f"duplicate_of={skipped.get('duplicate_of_candidate_id')}",
+                "bootstrap_success": None,
+                "bootstrap_attempted": None,
+                "candidate_eval_order": None,
+                "candidate_pool_size": candidate_pool_size,
+                "equivalence_hash": skipped.get("equivalence_hash"),
+                "validation_used_for_search": int(bool(config.validation_used_for_search)),
+                "candidate_pool_locked_pre_validation": int(bool(config.candidate_pool_locked_pre_validation)),
+                "timestamp": config.timestamp,
+            }
+        )
     return scan_rows, top_rows, search_log_rows
