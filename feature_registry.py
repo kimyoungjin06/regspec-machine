@@ -56,6 +56,18 @@ PHASE_A_PRETREATMENT_COLUMNS = {
     "include_in_sensitivity",
 }
 
+# Conservative whitelist for extension-table columns that are safe pre-treatment.
+# Unknown extension columns are blocked by default in generated registries.
+EXTENSION_PRETREATMENT_COLUMNS = {
+    # Intentionally empty by default; add columns only after timing audit.
+}
+
+DYAD_BASE_PRETREATMENT_COLUMNS = {
+    "pub_year_alt",
+    "recency_years_alt",
+    "is_academia_origin",
+}
+
 
 def _is_outcome_like(name: str) -> bool:
     lower = name.lower()
@@ -66,13 +78,18 @@ def _classify_timing(name: str) -> str:
     if _is_outcome_like(name):
         return "post_treatment_or_outcome_proxy"
     if name.startswith("ext__"):
-        return "pre_treatment"
+        base_name = name.replace("ext__", "", 1)
+        if base_name in EXTENSION_PRETREATMENT_COLUMNS:
+            return "pre_treatment"
+        return "unknown"
     if name.startswith("pa__"):
         base_name = name.replace("pa__", "", 1)
         if base_name in PHASE_A_PRETREATMENT_COLUMNS:
             return "pre_treatment"
         return "unknown"
-    return "pre_treatment"
+    if name in DYAD_BASE_PRETREATMENT_COLUMNS:
+        return "pre_treatment"
+    return "unknown"
 
 
 def _variation_metrics(

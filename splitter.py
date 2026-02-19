@@ -78,6 +78,7 @@ def apply_policy_split_file(
     split_csv: Path,
     split_seed_fallback: int = 20260219,
     discovery_ratio_fallback: float = 0.80,
+    strict: bool = False,
 ) -> Tuple[pd.DataFrame, Dict[str, object]]:
     src = pd.read_csv(split_csv)
     required = {"policy_document_id", "split_role"}
@@ -86,6 +87,7 @@ def apply_policy_split_file(
 
     split_map: Dict[str, str] = {}
     invalid_roles = 0
+    conflicting_roles = 0
     split_methods: list[str] = []
     split_seeds: list[int] = []
     for _, row in src.iterrows():
@@ -96,8 +98,10 @@ def apply_policy_split_file(
         if role not in {"discovery", "validation"}:
             invalid_roles += 1
             continue
-        if doc not in split_map:
-            split_map[doc] = role
+        if doc in split_map and split_map[doc] != role:
+            conflicting_roles += 1
+            continue
+        split_map[doc] = role
         method = str(row.get("split_method", "")).strip()
         if method:
             split_methods.append(method)
@@ -114,6 +118,8 @@ def apply_policy_split_file(
         role = split_map.get(doc)
         if role is None:
             n_fallback += 1
+            if strict:
+                continue
             role = (
                 "discovery"
                 if _policy_doc_hash_score(policy_document_id=doc, seed=split_seed_fallback)
@@ -121,6 +127,19 @@ def apply_policy_split_file(
                 else "validation"
             )
         roles.append(role)
+
+    if strict:
+        errors: list[str] = []
+        if n_fallback > 0:
+            errors.append(f"missing_docs_in_split_csv={n_fallback}")
+        if invalid_roles > 0:
+            errors.append(f"invalid_roles_in_split_csv={invalid_roles}")
+        if conflicting_roles > 0:
+            errors.append(f"conflicting_roles_in_split_csv={conflicting_roles}")
+        if errors:
+            raise ValueError(
+                "strict split lock failed: " + ", ".join(errors)
+            )
 
     split_method = split_methods[0] if split_methods and len(set(split_methods)) == 1 else "policy_document_holdout_external_csv"
     split_seed = split_seeds[0] if split_seeds and len(set(split_seeds)) == 1 else split_seed_fallback
@@ -144,5 +163,7 @@ def apply_policy_split_file(
         "n_rows_validation": int((out["split_role"] == "validation").sum()),
         "n_docs_missing_in_split_csv_fallback": n_fallback,
         "n_invalid_roles_in_split_csv": invalid_roles,
+        "n_conflicting_roles_in_split_csv": conflicting_roles,
+        "strict_lock_mode": int(strict),
     }
     return out, report
