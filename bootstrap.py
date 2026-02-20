@@ -61,6 +61,9 @@ def summarize_bootstrap(
     se = float(np.std(arr, ddof=1)) if arr.size > 1 else 0.0
     lo = float(np.quantile(arr, 0.025))
     hi = float(np.quantile(arr, 0.975))
-    p_boot = 2.0 * min(float(np.mean(arr <= 0.0)), float(np.mean(arr >= 0.0)))
+    # Finite-sample correction avoids exact zero p-values when no sign reversals appear.
+    n = int(arr.size)
+    left = (float(np.sum(arr <= 0.0)) + 1.0) / float(n + 1)
+    right = (float(np.sum(arr >= 0.0)) + 1.0) / float(n + 1)
+    p_boot = min(1.0, 2.0 * min(left, right))
     return est, lo, hi, se, p_boot
-

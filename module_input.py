@@ -172,13 +172,6 @@ def load_and_prepare_data(
                 "doi",
                 "pmid",
                 "pmcid",
-                "primary_field",
-                "primary_domain",
-                "primary_subfield",
-                "primary_topic",
-                "journal_or_source",
-                "work_type_openalex",
-                "language",
                 "affiliation_label",
                 "label_confidence",
                 "anchor_rule",
@@ -210,4 +203,3 @@ def load_and_prepare_data(
         input_report["phase_a_covariates_sha256"] = sha256_file(phase_a_covariates_csv)
 
     return data, {"inputs": input_report, "merge_report": merge_report}
-
