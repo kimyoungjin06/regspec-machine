@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from math import inf
 from typing import Dict, List, Sequence, Tuple
 
@@ -30,6 +30,12 @@ class ScanConfig:
     complexity_penalty: float = 0.01
     include_base_controls: bool = True
     base_controls: Tuple[str, ...] = ("pub_year_alt", "recency_years_alt")
+    contexts: Tuple[Tuple[str, str], ...] = (
+        ("all_contexts", "y_all"),
+        ("evidence_use_only", "y_evidence"),
+    )
+    validated_min_informative_events_by_y: Dict[str, int] = field(default_factory=dict)
+    validated_min_policy_docs_by_y: Dict[str, int] = field(default_factory=dict)
     max_features: int = 0
     data_hash: str = ""
     config_hash: str = ""
@@ -167,6 +173,39 @@ def _scan_one_split(
     n_choice_situations_total = _count_two_alt_events(df)
     n_twin_sets = int(df["pair_id"].nunique()) if "pair_id" in df.columns else 0
 
+    if y_col not in df.columns:
+        return _build_row(
+            run_id=config.run_id,
+            track=track,
+            context_scope=context_scope,
+            split_id=split_id,
+            split_role=split_role,
+            spec_id=spec_id,
+            key_factor=key_factor,
+            control_set=control_set_name,
+            fdr_family_id=fdr_family_id,
+            candidate_id=candidate_id,
+            n_choice_situations_total=n_choice_situations_total,
+            n_single_choice_informative=0,
+            n_policy_docs_informative=0,
+            n_twin_sets=n_twin_sets,
+            beta=None,
+            ci95_lower=None,
+            ci95_upper=None,
+            se_boot=None,
+            p_boot=None,
+            score=None,
+            bootstrap_cluster_unit=config.bootstrap_cluster_unit,
+            bootstrap_success=0,
+            bootstrap_attempted=0,
+            status="failed_rule_checks",
+            reason_code="missing_y_column",
+            reason_detail=str(y_col),
+            reason_stage="precheck",
+            top1_policy_doc_event_share=None,
+            config=config,
+        )
+
     missing_exogs = [c for c in exog_cols if c not in df.columns]
     if missing_exogs:
         return _build_row(
@@ -203,8 +242,12 @@ def _scan_one_split(
 
     role_is_validation = split_role == "validation"
     if role_is_validation:
-        min_informative_events = config.min_informative_events_validated
-        min_policy_docs_informative = config.min_policy_docs_informative_validated
+        min_informative_events = int(
+            config.validated_min_informative_events_by_y.get(y_col, config.min_informative_events_validated)
+        )
+        min_policy_docs_informative = int(
+            config.validated_min_policy_docs_by_y.get(y_col, config.min_policy_docs_informative_validated)
+        )
         low_events_status = "not_validated_out_of_sample"
         low_policy_docs_status = "not_validated_out_of_sample"
         high_concentration_status = "not_validated_out_of_sample"
@@ -615,7 +658,59 @@ def run_key_factor_scan(
         base_controls = [c for c in config.base_controls if c in df.columns]
         control_specs.append(("clogit_key_plus_base_controls", base_controls))
 
-    contexts = [("all_contexts", "y_all"), ("evidence_use_only", "y_evidence")]
+    raw_contexts = list(config.contexts) if config.contexts else []
+    contexts: List[Tuple[str, str]] = []
+    skipped_contexts: List[Dict[str, str]] = []
+    seen_contexts: set[Tuple[str, str]] = set()
+    for row in raw_contexts:
+        if not isinstance(row, (tuple, list)) or len(row) != 2:
+            skipped_contexts.append(
+                {
+                    "context_scope": "",
+                    "y_col": "",
+                    "reason_code": "invalid_context_definition",
+                    "reason_detail": str(row),
+                }
+            )
+            continue
+        context_scope = str(row[0]).strip()
+        y_col = str(row[1]).strip()
+        if not context_scope or not y_col:
+            skipped_contexts.append(
+                {
+                    "context_scope": context_scope,
+                    "y_col": y_col,
+                    "reason_code": "invalid_context_definition",
+                    "reason_detail": "context_scope_or_y_col_empty",
+                }
+            )
+            continue
+        key = (context_scope, y_col)
+        if key in seen_contexts:
+            skipped_contexts.append(
+                {
+                    "context_scope": context_scope,
+                    "y_col": y_col,
+                    "reason_code": "duplicate_context_definition",
+                    "reason_detail": "duplicate context_scope+y_col pair",
+                }
+            )
+            continue
+        seen_contexts.add(key)
+        if y_col not in df.columns:
+            skipped_contexts.append(
+                {
+                    "context_scope": context_scope,
+                    "y_col": y_col,
+                    "reason_code": "missing_context_y_column",
+                    "reason_detail": f"y column not found in data: {y_col}",
+                }
+            )
+            continue
+        contexts.append(key)
+    if not contexts:
+        raise ValueError("no valid contexts available for scan")
+
     tracks = sorted(df["track"].dropna().astype(str).unique())
     split_id = str(df["split_id"].dropna().astype(str).iloc[0]) if "split_id" in df.columns else ""
 
@@ -629,10 +724,10 @@ def run_key_factor_scan(
             track_split_cache[(track, split_role)] = track_df[track_df["split_role"] == split_role].copy()
         for context_scope, y_col in contexts:
             for spec_id, controls in control_specs:
-                fdr_family_id = f"{track}|{context_scope}|{spec_id}"
+                fdr_family_id = f"{track}|{context_scope}|{y_col}|{spec_id}"
                 for feature in allowed_features:
                     exog_cols = [feature, *[c for c in controls if c != feature]]
-                    candidate_id = f"{track}|{context_scope}|{spec_id}|{feature}"
+                    candidate_id = f"{track}|{context_scope}|{y_col}|{spec_id}|{feature}"
                     equivalence_hash = _equivalence_hash(
                         track=track,
                         context_scope=context_scope,
@@ -647,6 +742,7 @@ def run_key_factor_scan(
                                 "equivalence_hash": equivalence_hash,
                                 "track": track,
                                 "context_scope": context_scope,
+                                "y_col": y_col,
                                 "spec_id": spec_id,
                                 "key_factor": feature,
                             }
@@ -693,6 +789,7 @@ def run_key_factor_scan(
         row["candidate_eval_order"] = candidate_eval_order
         row["candidate_pool_size"] = candidate_pool_size
         row["equivalence_hash"] = str(spec["equivalence_hash"])
+        row["y_col"] = str(spec["y_col"])
         scan_rows.append(row)
     for spec in candidate_plan:
         split_role = "validation"
@@ -716,6 +813,7 @@ def run_key_factor_scan(
         row["candidate_eval_order"] = candidate_eval_order
         row["candidate_pool_size"] = candidate_pool_size
         row["equivalence_hash"] = str(spec["equivalence_hash"])
+        row["y_col"] = str(spec["y_col"])
         scan_rows.append(row)
 
     validation_rows = [
@@ -770,6 +868,7 @@ def run_key_factor_scan(
                 "candidate_id": cid,
                 "track": ref.get("track"),
                 "context_scope": ref.get("context_scope"),
+                "y_col": ref.get("y_col"),
                 "spec_id": ref.get("spec_id"),
                 "key_factor": ref.get("key_factor"),
                 "control_set": ref.get("control_set"),
@@ -819,6 +918,7 @@ def run_key_factor_scan(
                 "candidate_id": row.get("candidate_id"),
                 "track": row.get("track"),
                 "context_scope": row.get("context_scope"),
+                "y_col": row.get("y_col"),
                 "split_role": row.get("split_role"),
                 "spec_id": row.get("spec_id"),
                 "key_factor": row.get("key_factor"),
@@ -843,6 +943,7 @@ def run_key_factor_scan(
                 "candidate_id": skipped.get("candidate_id"),
                 "track": skipped.get("track"),
                 "context_scope": skipped.get("context_scope"),
+                "y_col": skipped.get("y_col"),
                 "split_role": "plan",
                 "spec_id": skipped.get("spec_id"),
                 "key_factor": skipped.get("key_factor"),
@@ -855,6 +956,31 @@ def run_key_factor_scan(
                 "candidate_eval_order": None,
                 "candidate_pool_size": candidate_pool_size,
                 "equivalence_hash": skipped.get("equivalence_hash"),
+                "validation_used_for_search": int(bool(config.validation_used_for_search)),
+                "candidate_pool_locked_pre_validation": int(bool(config.candidate_pool_locked_pre_validation)),
+                "timestamp": config.timestamp,
+            }
+        )
+    for skipped in skipped_contexts:
+        search_log_rows.append(
+            {
+                "run_id": config.run_id,
+                "candidate_id": "",
+                "track": "",
+                "context_scope": skipped.get("context_scope"),
+                "y_col": skipped.get("y_col"),
+                "split_role": "plan",
+                "spec_id": "",
+                "key_factor": "",
+                "status": "skipped_context",
+                "reason_stage": "plan",
+                "reason_code": skipped.get("reason_code"),
+                "reason_detail": skipped.get("reason_detail"),
+                "bootstrap_success": None,
+                "bootstrap_attempted": None,
+                "candidate_eval_order": None,
+                "candidate_pool_size": candidate_pool_size,
+                "equivalence_hash": "",
                 "validation_used_for_search": int(bool(config.validation_used_for_search)),
                 "candidate_pool_locked_pre_validation": int(bool(config.candidate_pool_locked_pre_validation)),
                 "timestamp": config.timestamp,

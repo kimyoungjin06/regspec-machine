@@ -8,6 +8,7 @@ from .module_input import (
     sha256_json,
 )
 from .feature_registry import build_feature_registry, load_feature_registry
+from .shortlist import select_shortlist_features_from_top_models
 from .splitter import apply_policy_split_file, assign_policy_document_holdout
 from .search_engine import ScanConfig, run_key_factor_scan
 
@@ -21,6 +22,7 @@ __all__ = [
     "load_and_prepare_data",
     "load_feature_registry",
     "run_key_factor_scan",
+    "select_shortlist_features_from_top_models",
     "sha256_file",
     "sha256_json",
 ]

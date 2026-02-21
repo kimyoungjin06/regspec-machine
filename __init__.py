@@ -13,6 +13,7 @@ from .regspec_machine import (  # noqa: F401
     load_and_prepare_data,
     load_feature_registry,
     run_key_factor_scan,
+    select_shortlist_features_from_top_models,
     sha256_file,
     sha256_json,
 )
@@ -27,6 +28,7 @@ __all__ = [
     "load_and_prepare_data",
     "load_feature_registry",
     "run_key_factor_scan",
+    "select_shortlist_features_from_top_models",
     "sha256_file",
     "sha256_json",
 ]

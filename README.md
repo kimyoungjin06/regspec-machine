@@ -72,6 +72,57 @@ scan_rows, top_rows, search_log = run_key_factor_scan(df=data, feature_registry=
 - `y_all` from `reference_dik`
 - `y_evidence` from `reference_dik_evidence_use`
 
+## Group Similar Y Indicators
+
+You can define grouped Y contexts from multiple similar indicators with a JSON file.
+
+Example `y_contexts.json`:
+
+```json
+{
+  "contexts": [
+    {
+      "context_scope": "policy_any_group",
+      "source_cols": ["y_all", "y_evidence"],
+      "group_mode": "any_positive"
+    }
+  ]
+}
+```
+
+Run with:
+
+```bash
+.venv/bin/python scripts/modeling/run_phase_b_bikard_machine_scientist_scan.py \
+  --y-contexts-json y_contexts.json \
+  --y-contexts-merge-mode append
+```
+
+- `append`: default `y_all/y_evidence` + custom grouped contexts
+- `replace`: use only contexts from JSON
+- `group_mode`: `any_positive` | `all_positive` | `at_least_k` (with `threshold`)
+
+Optional robustness flags:
+
+```bash
+--auto-scale-y-validated-gates \
+--y-feasibility-mode fail_below_floor \
+--scan-family-dedupe-mode atom \
+--auto-bootstrap-escalation \
+--escalation-n-bootstrap 499 \
+--enforce-track-consensus \
+--consensus-anchor-track primary_strict \
+--consensus-min-anchor-tier validated_candidate \
+--out-restart-stability-csv outputs/tables/custom_restart_stability.csv
+```
+
+- `--auto-scale-y-validated-gates`: adapts validated gates per `y_col` using validation capacity.
+- `--y-feasibility-mode`: `warn` | `fail_unusable` | `fail_below_floor`; choose fail-fast policy for low-capacity Y contexts.
+- `--scan-family-dedupe-mode atom`: keeps one representative feature per atom family (reduces expression over-crowding).
+- `--auto-bootstrap-escalation`: reruns borderline validation candidates with higher bootstrap.
+- `--enforce-track-consensus`: demotes non-anchor validated candidates when the anchor track does not reach required tier.
+- `--out-restart-stability-csv`: writes per-candidate restart stability diagnostics for reproducibility monitoring.
+
 ## TwinPaper example (CLI, real paths)
 
 Run from `TwinPaper` workspace root:
@@ -98,6 +149,7 @@ cd /home/kimyoungjin06/Desktop/Workspace/1.2.8.TwinPaper
 Main outputs:
 - `outputs/tables/phase_b_bikard_machine_scientist_scan_runs_*.csv`
 - `outputs/tables/phase_b_bikard_machine_scientist_top_models_*.csv`
+- `outputs/tables/phase_b_bikard_machine_scientist_restart_stability_*.csv`
 - `data/metadata/phase_b_bikard_machine_scientist_run_summary_*.json`
 
 ## Hypothesis-first run (single X)
@@ -116,6 +168,52 @@ prepare a minimal registry and run:
 ```
 
 Then pass it with `--input-feature-registry-json <path_to_json>`.
+
+## Open-explore with auto refinement
+
+When hypothesis is not fixed, you can run wide exploration first and then let the runner
+auto-build a compact shortlist from top models and rerun it with stronger bootstrap.
+
+```bash
+cd /home/kimyoungjin06/Desktop/Workspace/1.2.8.TwinPaper
+.venv/bin/python scripts/modeling/run_phase_b_bikard_machine_scientist_scan.py \
+  --run-id phase_b_bikard_keyfactor_scan_openexplore_example_20260220 \
+  --input-feature-registry-json data/metadata/phase_b_keyfactor_explorer_feature_registry_refresh_20260220.json \
+  --gate-profile adaptive_production \
+  --expression-registry-mode ms_benchmark_lite \
+  --categorical-encoding-mode onehot \
+  --n-bootstrap 49 \
+  --auto-refine-shortlist \
+  --refine-tier-mode validated_or_support \
+  --refine-max-features 8 \
+  --refine-dedupe-mode atom \
+  --refine-n-bootstrap 499 \
+  --refine-run-id-suffix refine \
+  --print-cli-summary
+```
+
+Refinement artifacts are written with `_<suffix>` added to each output path
+(for example `..._scan_runs_..._refine.csv`).
+
+## Short command (preset launcher)
+
+If the full CLI feels too long, use the preset launcher:
+
+```bash
+cd /home/kimyoungjin06/Desktop/Workspace/1.2.8.TwinPaper
+.venv/bin/python scripts/modeling/run_phase_b_regspec_preset.py --mode openexplore_autorefine
+```
+
+Modes:
+- `openexplore_autorefine`: stage-1 open explore + stage-2 shortlist refinement
+- `openexplore`: only stage-1 open explore
+- `singlex`: only `is_academia_origin` hypothesis run
+
+Useful overrides:
+- `--run-id <custom_id>`
+- `--scan-n-bootstrap <int>`
+- `--refine-n-bootstrap <int>` (for `openexplore_autorefine`)
+- `--dry-run` (prints the expanded long command without executing)
 
 ## Legacy compatibility
 
