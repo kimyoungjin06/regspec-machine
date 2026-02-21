@@ -28,6 +28,13 @@ It focuses on one job: searching regression specifications while enforcing audit
 python -m pip install -e .
 ```
 
+## Test (dev)
+
+```bash
+python -m pip install -e .[test]
+python -m pytest -q
+```
+
 ## Quick start (Python API)
 
 ```python
