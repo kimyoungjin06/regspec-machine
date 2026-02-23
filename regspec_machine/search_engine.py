@@ -887,8 +887,43 @@ def run_key_factor_scan(
                         }
                     )
     candidate_pool_size = len(candidate_plan)
+    if bool(config.validation_used_for_search):
+        raise ValueError("validation_used_for_search must remain false in run_key_factor_scan")
+    if not bool(config.candidate_pool_locked_pre_validation):
+        raise ValueError(
+            "candidate_pool_locked_pre_validation must remain true to preserve holdout integrity"
+        )
 
-    # Holdout-leakage guard: freeze candidate pool and evaluate discovery first.
+    # Holdout-leakage guard: candidate pool is fixed before any split evaluation.
+    search_log_rows: List[Dict[str, object]] = [
+        {
+            "run_id": config.run_id,
+            "candidate_id": "",
+            "track": "",
+            "context_scope": "",
+            "y_col": "",
+            "split_role": "plan",
+            "spec_id": "",
+            "key_factor": "",
+            "status": "search_governance_contract",
+            "reason_stage": "plan",
+            "reason_code": "validation_not_used_for_search",
+            "reason_detail": (
+                f"candidate_pool_locked_pre_validation=true; "
+                f"candidate_pool_size={candidate_pool_size}"
+            ),
+            "bootstrap_success": None,
+            "bootstrap_attempted": None,
+            "candidate_eval_order": None,
+            "candidate_pool_size": candidate_pool_size,
+            "equivalence_hash": "",
+            "validation_used_for_search": 0,
+            "candidate_pool_locked_pre_validation": 1,
+            "timestamp": config.timestamp,
+        }
+    ]
+
+    # Discovery pass runs first on the fixed candidate pool.
     scan_rows: List[Dict[str, object]] = []
     candidate_eval_order = 0
     for spec in candidate_plan:
@@ -915,6 +950,31 @@ def run_key_factor_scan(
         row["equivalence_hash"] = str(spec["equivalence_hash"])
         row["y_col"] = str(spec["y_col"])
         scan_rows.append(row)
+    search_log_rows.append(
+        {
+            "run_id": config.run_id,
+            "candidate_id": "",
+            "track": "",
+            "context_scope": "",
+            "y_col": "",
+            "split_role": "plan",
+            "spec_id": "",
+            "key_factor": "",
+            "status": "search_governance_contract",
+            "reason_stage": "schedule",
+            "reason_code": "validation_runs_after_discovery_on_locked_pool",
+            "reason_detail": f"discovery_candidates_evaluated={candidate_eval_order}",
+            "bootstrap_success": None,
+            "bootstrap_attempted": None,
+            "candidate_eval_order": None,
+            "candidate_pool_size": candidate_pool_size,
+            "equivalence_hash": "",
+            "validation_used_for_search": 0,
+            "candidate_pool_locked_pre_validation": 1,
+            "timestamp": config.timestamp,
+        }
+    )
+    # Validation pass runs after discovery and never mutates candidate_plan.
     for spec in candidate_plan:
         split_role = "validation"
         split_df = track_split_cache[(str(spec["track"]), split_role)]
@@ -1034,7 +1094,6 @@ def run_key_factor_scan(
         )
     )
 
-    search_log_rows: List[Dict[str, object]] = []
     for row in scan_rows:
         search_log_rows.append(
             {

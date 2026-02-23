@@ -7,6 +7,9 @@ Governed regression specification search engine for key-factor discovery with ho
 `regspec-machine` is a standalone extraction of the key-factor scan engine.
 It focuses on one job: searching regression specifications while enforcing audit-friendly guardrails.
 
+Beginner guide (Korean, no-regression background):
+- `docs/BEGINNER_GUIDE_KO.md`
+
 ## Project Priority (TwinPaper)
 
 For TwinPaper operations, the first goal is:
@@ -137,6 +140,7 @@ Optional robustness flags:
 --consensus-min-anchor-tier validated_candidate \
 --out-restart-stability-csv outputs/tables/custom_restart_stability.csv \
 --min-free-space-mb 1024 \
+--legacy-single-gate-sync-validation \
 --confirmatory-y-cols y_all \
 --nonconfirmatory-max-tier support_candidate
 ```
@@ -148,6 +152,7 @@ Optional robustness flags:
 - `--enforce-track-consensus`: demotes non-anchor validated candidates when the anchor track does not reach required tier.
 - `--out-restart-stability-csv`: writes per-candidate restart stability diagnostics for reproducibility monitoring.
 - `--min-free-space-mb`: fail fast when free disk space is below threshold before stage writes.
+- `--legacy-single-gate-sync-validation`: when legacy `--min-*` flags are used, also apply them to validation gates (default is discovery-only override).
 - `--confirmatory-y-cols` / `--nonconfirmatory-max-tier`: restrict which `y_col` contexts are eligible for confirmatory validation tiering in inference aggregation.
 
 ## TwinPaper example (CLI, real paths)
@@ -235,19 +240,32 @@ cd /home/kimyoungjin06/Desktop/Workspace/1.2.8.TwinPaper
 ```
 
 Modes:
-- `paired_nooption_singlex`: run `nooption_baseline` then `singlex_baseline` in one command
+- `paired_nooption_singlex`: run `nooption_baseline` then `singlex_baseline` in one command, and auto-write a direction-review JSON (`validated/p/q/restart-stability/singlex consensus`)
+- `paired_nooption_singlex_hypothesis`: run `nooption_hypothesis_panel` then `singlex_hypothesis_panel` (windowed hypothesis panel: `y_3y,y_5y,y_10y`), and auto-write the same direction-review JSON
 - `nooption`: minimal runner path without exploration shortcuts
 - `nooption_baseline`: nooption path with governance baseline (`n_restarts=5`, auto y-gate scaling, fail on unusable Y, skip discovery-infeasible track×Y blocks, auto-disable plus-base spec under low discovery capacity)
+- `nooption_hypothesis_panel`: nooption baseline + derived windowed outcomes (`--derive-y-time-windows`, default years `3,5,10`) with auto confirmatory policy (default keeps `y_5y` confirmatory, demotes low-support windows to nonconfirmatory)
 - `openexplore_autorefine`: stage-1 open explore + stage-2 shortlist refinement
 - `openexplore`: only stage-1 open explore
 - `singlex`: only `is_academia_origin` hypothesis run
 - `singlex_baseline`: singleton hypothesis run with governance baseline (`n_restarts=5`, consensus, y-feasibility fail-fast, key-only main path via `--no-base-controls`)
+- `singlex_hypothesis_panel`: singlex baseline + derived windowed outcomes (`y_3y,y_5y,y_10y`) with auto confirmatory policy (default keeps `y_5y` confirmatory, `y_3y` sensitivity)
 
 Useful overrides:
 - `--run-id <custom_id>`
 - `--scan-n-bootstrap <int>`
 - `--refine-n-bootstrap <int>` (for `openexplore_autorefine`)
 - `--out-paired-summary-json <path>` (for `paired_nooption_singlex`, writes pair-level status even on partial failure)
+- `--out-direction-review-json <path>` (for paired modes, writes automated direction-review summary JSON)
+- `--skip-direction-review` (for paired modes, disables auto direction-review summary generation)
+- `--paired-legacy-sync-validation` (for `paired_nooption_singlex`, forwards `--legacy-single-gate-sync-validation` to child runner calls)
+- `--hypothesis-window-years 3,5,10` (for `*_hypothesis_panel` modes; forwarded in paired hypothesis mode)
+- `--hypothesis-confirmatory-window-years 3,5` (default for `*_hypothesis_panel`; avoids redundant confirmatory `y_10y` in current dataset)
+- `--hypothesis-time-series-precheck-mode fail_redundant_confirmatory` (default for `*_hypothesis_panel`; fail-fast only on redundant confirmatory windows)
+- `--hypothesis-auto-confirmatory-policy drop_redundant_and_low_support` (default for `*_hypothesis_panel`; auto removes low-support windows from confirmatory)
+- `--hypothesis-nonconfirmatory-max-tier exploratory` (default for `*_hypothesis_panel`; sensitivity windows are capped at exploratory tier)
+- `--extra-arg=--time-series-precheck-mode --extra-arg=fail_any` (fail-fast when redundant confirmatory windows or low-support track-y are detected)
+- `--extra-arg=--time-series-min-track-positive-events --extra-arg=<int>` (default follows estimable event gate)
 - `--dry-run` (prints the expanded long command without executing)
 
 ## Recommended singleton baseline (TwinPaper)
@@ -278,6 +296,22 @@ cd /home/kimyoungjin06/Desktop/Workspace/1.2.8.TwinPaper
   --mode paired_nooption_singlex \
   --run-id phase_b_bikard_keyfactor_scan_pair_baseline_<date> \
   --scan-n-bootstrap 49
+```
+
+Default direction-review output is:
+- `data/metadata/phase_b_bikard_machine_scientist_direction_review_<run_id>.json`
+
+## Recommended paired hypothesis panel (TwinPaper)
+
+Run nooption/singlex together under the same windowed hypothesis panel:
+
+```bash
+cd /home/kimyoungjin06/Desktop/Workspace/1.2.8.TwinPaper
+.venv/bin/python scripts/modeling/run_phase_b_regspec_preset.py \
+  --mode paired_nooption_singlex_hypothesis \
+  --run-id phase_b_bikard_keyfactor_scan_pair_hypothesis_<date> \
+  --scan-n-bootstrap 49 \
+  --hypothesis-window-years 3,5,10
 ```
 
 ## Legacy compatibility

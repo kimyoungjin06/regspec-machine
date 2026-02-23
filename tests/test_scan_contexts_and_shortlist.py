@@ -1,4 +1,5 @@
 import pandas as pd
+import pytest
 
 from regspec_machine.search_engine import ScanConfig, run_key_factor_scan
 from regspec_machine.shortlist import select_shortlist_features_from_top_models
@@ -143,3 +144,38 @@ def test_shortlist_atom_dedupe_keeps_best_candidate() -> None:
     assert "pa__log1p_author_count" in selected_features
     assert int(meta["n_selected_features"]) == 2
     assert int(meta["n_dropped_duplicate_signature"]) >= 1
+
+
+def test_validation_leakage_guard_and_governance_logs() -> None:
+    df = _mock_scan_df(include_y_evidence=True)
+    feature_registry = [{"feature_name": "x_feat", "allowed_in_scan": 1}]
+    config = ScanConfig(
+        run_id="t_governance",
+        include_base_controls=False,
+        min_informative_events_estimable=1,
+        min_policy_docs_informative_estimable=1,
+        min_informative_events_validated=1,
+        min_policy_docs_informative_validated=1,
+        max_top1_policy_doc_share=1.0,
+        contexts=(("ctx_all", "y_all"),),
+    )
+
+    _, _, search_log = run_key_factor_scan(df=df, feature_registry=feature_registry, config=config)
+    governance_rows = [r for r in search_log if str(r.get("status")) == "search_governance_contract"]
+    reason_codes = {str(r.get("reason_code")) for r in governance_rows}
+    assert "validation_not_used_for_search" in reason_codes
+    assert "validation_runs_after_discovery_on_locked_pool" in reason_codes
+
+    bad_config = ScanConfig(
+        run_id="t_governance_bad",
+        include_base_controls=False,
+        min_informative_events_estimable=1,
+        min_policy_docs_informative_estimable=1,
+        min_informative_events_validated=1,
+        min_policy_docs_informative_validated=1,
+        max_top1_policy_doc_share=1.0,
+        contexts=(("ctx_all", "y_all"),),
+        validation_used_for_search=True,
+    )
+    with pytest.raises(ValueError, match="validation_used_for_search"):
+        run_key_factor_scan(df=df, feature_registry=feature_registry, config=bad_config)
