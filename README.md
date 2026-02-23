@@ -136,6 +136,7 @@ Optional robustness flags:
 --consensus-anchor-track primary_strict \
 --consensus-min-anchor-tier validated_candidate \
 --out-restart-stability-csv outputs/tables/custom_restart_stability.csv \
+--min-free-space-mb 1024 \
 --confirmatory-y-cols y_all \
 --nonconfirmatory-max-tier support_candidate
 ```
@@ -146,6 +147,7 @@ Optional robustness flags:
 - `--auto-bootstrap-escalation`: reruns borderline validation candidates with higher bootstrap (shortlist is selected from inference-aggregated top models when available).
 - `--enforce-track-consensus`: demotes non-anchor validated candidates when the anchor track does not reach required tier.
 - `--out-restart-stability-csv`: writes per-candidate restart stability diagnostics for reproducibility monitoring.
+- `--min-free-space-mb`: fail fast when free disk space is below threshold before stage writes.
 - `--confirmatory-y-cols` / `--nonconfirmatory-max-tier`: restrict which `y_col` contexts are eligible for confirmatory validation tiering in inference aggregation.
 
 ## TwinPaper example (CLI, real paths)
@@ -245,6 +247,7 @@ Useful overrides:
 - `--run-id <custom_id>`
 - `--scan-n-bootstrap <int>`
 - `--refine-n-bootstrap <int>` (for `openexplore_autorefine`)
+- `--out-paired-summary-json <path>` (for `paired_nooption_singlex`, writes pair-level status even on partial failure)
 - `--dry-run` (prints the expanded long command without executing)
 
 ## Recommended singleton baseline (TwinPaper)
