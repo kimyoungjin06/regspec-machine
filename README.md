@@ -171,6 +171,7 @@ cd /home/kimyoungjin06/Desktop/Workspace/1.2.8.TwinPaper
 Main outputs:
 - `outputs/tables/phase_b_bikard_machine_scientist_scan_runs_*.csv`
 - `outputs/tables/phase_b_bikard_machine_scientist_top_models_*.csv`
+- `outputs/tables/phase_b_bikard_machine_scientist_top_models_*_inference.csv` (candidate-level inference view aggregated across restarts)
 - `outputs/tables/phase_b_bikard_machine_scientist_restart_stability_*.csv`
 - `data/metadata/phase_b_bikard_machine_scientist_run_summary_*.json`
 
