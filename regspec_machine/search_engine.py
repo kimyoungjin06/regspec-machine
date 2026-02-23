@@ -45,6 +45,9 @@ class ScanConfig:
     validation_used_for_search: bool = False
     candidate_pool_locked_pre_validation: bool = True
     skip_discovery_infeasible_track_y: bool = False
+    auto_disable_base_controls_low_capacity: bool = False
+    base_controls_min_events_per_exog: int = 10
+    base_controls_min_policy_docs_per_exog: int = 5
 
 
 def _stable_seed(base_seed: int, token: str) -> int:
@@ -681,10 +684,29 @@ def run_key_factor_scan(
     if config.max_features > 0:
         allowed_features = allowed_features[: config.max_features]
 
-    control_specs: List[Tuple[str, List[str]]] = [("clogit_key_only", [])]
+    base_controls: List[str] = []
     if config.include_base_controls:
         base_controls = [c for c in config.base_controls if c in df.columns]
-        control_specs.append(("clogit_key_plus_base_controls", base_controls))
+    base_control_spec_enabled = bool(config.include_base_controls and len(base_controls) > 0)
+    base_controls_min_events_per_exog = max(int(config.base_controls_min_events_per_exog), 1)
+    base_controls_min_policy_docs_per_exog = max(int(config.base_controls_min_policy_docs_per_exog), 1)
+    n_exog_plus_base = int(1 + len(base_controls)) if base_control_spec_enabled else 0
+    min_events_for_plus_base = (
+        max(
+            int(config.min_informative_events_estimable),
+            int(n_exog_plus_base * base_controls_min_events_per_exog),
+        )
+        if base_control_spec_enabled
+        else 0
+    )
+    min_docs_for_plus_base = (
+        max(
+            int(config.min_policy_docs_informative_estimable),
+            int(n_exog_plus_base * base_controls_min_policy_docs_per_exog),
+        )
+        if base_control_spec_enabled
+        else 0
+    )
 
     raw_contexts = list(config.contexts) if config.contexts else []
     contexts: List[Tuple[str, str]] = []
@@ -745,6 +767,7 @@ def run_key_factor_scan(
     candidate_plan: List[Dict[str, object]] = []
     skipped_candidates: List[Dict[str, object]] = []
     skipped_track_contexts: List[Dict[str, object]] = []
+    skipped_control_specs: List[Dict[str, object]] = []
     eq_seen: Dict[str, str] = {}
     track_split_cache: Dict[Tuple[str, str], pd.DataFrame] = {}
     for track in tracks:
@@ -791,7 +814,40 @@ def run_key_factor_scan(
                         }
                     )
                     continue
-            for spec_id, controls in control_specs:
+            context_control_specs: List[Tuple[str, List[str]]] = [("clogit_key_only", [])]
+            if base_control_spec_enabled:
+                allow_plus_base = True
+                cap = discovery_capacity_by_track_y.get((track, y_col))
+                if cap is None:
+                    cap = _informative_capacity_for_y(
+                        track_split_cache[(track, "discovery")],
+                        y_col=y_col,
+                    )
+                    discovery_capacity_by_track_y[(track, y_col)] = cap
+                cap_events = int(cap.get("n_informative_events", 0))
+                cap_docs = int(cap.get("n_policy_docs_informative", 0))
+                if config.auto_disable_base_controls_low_capacity:
+                    allow_plus_base = (
+                        cap_events >= int(min_events_for_plus_base)
+                        and cap_docs >= int(min_docs_for_plus_base)
+                    )
+                    if not allow_plus_base:
+                        skipped_control_specs.append(
+                            {
+                                "track": track,
+                                "context_scope": context_scope,
+                                "y_col": y_col,
+                                "spec_id": "clogit_key_plus_base_controls",
+                                "reason_code": "disabled_base_controls_low_discovery_capacity",
+                                "reason_detail": (
+                                    f"events {cap_events} < {int(min_events_for_plus_base)} or "
+                                    f"policy_docs {cap_docs} < {int(min_docs_for_plus_base)}"
+                                ),
+                            }
+                        )
+                if allow_plus_base:
+                    context_control_specs.append(("clogit_key_plus_base_controls", base_controls))
+            for spec_id, controls in context_control_specs:
                 fdr_family_id = f"{track}|{context_scope}|{y_col}|{spec_id}"
                 for feature in allowed_features:
                     exog_cols = [feature, *[c for c in controls if c != feature]]
@@ -1066,6 +1122,31 @@ def run_key_factor_scan(
                 "spec_id": "",
                 "key_factor": "",
                 "status": "skipped_track_context",
+                "reason_stage": "plan",
+                "reason_code": skipped.get("reason_code"),
+                "reason_detail": skipped.get("reason_detail"),
+                "bootstrap_success": None,
+                "bootstrap_attempted": None,
+                "candidate_eval_order": None,
+                "candidate_pool_size": candidate_pool_size,
+                "equivalence_hash": "",
+                "validation_used_for_search": int(bool(config.validation_used_for_search)),
+                "candidate_pool_locked_pre_validation": int(bool(config.candidate_pool_locked_pre_validation)),
+                "timestamp": config.timestamp,
+            }
+        )
+    for skipped in skipped_control_specs:
+        search_log_rows.append(
+            {
+                "run_id": config.run_id,
+                "candidate_id": "",
+                "track": skipped.get("track"),
+                "context_scope": skipped.get("context_scope"),
+                "y_col": skipped.get("y_col"),
+                "split_role": "plan",
+                "spec_id": skipped.get("spec_id"),
+                "key_factor": "",
+                "status": "skipped_control_spec",
                 "reason_stage": "plan",
                 "reason_code": skipped.get("reason_code"),
                 "reason_detail": skipped.get("reason_detail"),
