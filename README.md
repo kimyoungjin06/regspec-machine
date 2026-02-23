@@ -7,6 +7,17 @@ Governed regression specification search engine for key-factor discovery with ho
 `regspec-machine` is a standalone extraction of the key-factor scan engine.
 It focuses on one job: searching regression specifications while enforcing audit-friendly guardrails.
 
+## Project Priority (TwinPaper)
+
+For TwinPaper operations, the first goal is:
+- build and tune the module so that the **hypothesis-first singleton path (`singlex`)** is as strong and reproducible as possible.
+
+Direction-review order (mandatory):
+1. run `singlex` baseline for current code
+2. apply one change set
+3. rerun `singlex` and compare `validated_candidate`, `p/q`, and restart stability
+4. only then run open-explore for secondary insight
+
 ## Core guardrails
 
 - Strict discovery/validation split at `policy_document_id` level
@@ -221,6 +232,24 @@ Useful overrides:
 - `--scan-n-bootstrap <int>`
 - `--refine-n-bootstrap <int>` (for `openexplore_autorefine`)
 - `--dry-run` (prints the expanded long command without executing)
+
+## Recommended singleton baseline (TwinPaper)
+
+Use this as the default start point for every direction review:
+
+```bash
+cd /home/kimyoungjin06/Desktop/Workspace/1.2.8.TwinPaper
+.venv/bin/python scripts/modeling/run_phase_b_regspec_preset.py \
+  --mode singlex \
+  --run-id phase_b_bikard_keyfactor_scan_singlex_baseline_<date> \
+  --scan-n-bootstrap 199 \
+  --extra-arg=--n-restarts --extra-arg=5 \
+  --extra-arg=--enforce-track-consensus \
+  --extra-arg=--consensus-anchor-track --extra-arg=primary_strict \
+  --extra-arg=--consensus-min-anchor-tier --extra-arg=support_candidate \
+  --extra-arg=--auto-scale-y-validated-gates \
+  --extra-arg=--y-feasibility-mode --extra-arg=fail_below_floor
+```
 
 ## Legacy compatibility
 
