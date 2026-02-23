@@ -229,11 +229,11 @@ cd /home/kimyoungjin06/Desktop/Workspace/1.2.8.TwinPaper
 Modes:
 - `paired_nooption_singlex`: run `nooption_baseline` then `singlex_baseline` in one command
 - `nooption`: minimal runner path without exploration shortcuts
-- `nooption_baseline`: nooption path with governance baseline (`n_restarts=5`, auto y-gate scaling, fail on unusable Y)
+- `nooption_baseline`: nooption path with governance baseline (`n_restarts=5`, auto y-gate scaling, fail on unusable Y, skip discovery-infeasible track×Y blocks)
 - `openexplore_autorefine`: stage-1 open explore + stage-2 shortlist refinement
 - `openexplore`: only stage-1 open explore
 - `singlex`: only `is_academia_origin` hypothesis run
-- `singlex_baseline`: singleton hypothesis run with governance baseline (`n_restarts=5`, consensus, y-feasibility fail-fast)
+- `singlex_baseline`: singleton hypothesis run with governance baseline (`n_restarts=5`, consensus, y-feasibility fail-fast, key-only main path via `--no-base-controls`)
 
 Useful overrides:
 - `--run-id <custom_id>`

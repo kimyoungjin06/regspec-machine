@@ -44,6 +44,7 @@ class ScanConfig:
     timestamp: str = ""
     validation_used_for_search: bool = False
     candidate_pool_locked_pre_validation: bool = True
+    skip_discovery_infeasible_track_y: bool = False
 
 
 def _stable_seed(base_seed: int, token: str) -> int:
@@ -74,6 +75,33 @@ def _variation_filtered_df(df: pd.DataFrame, *, feature_col: str) -> pd.DataFram
         if float(vals.iloc[0]) != float(vals.iloc[1]):
             keep_events.append(str(eid))
     return df[df["event_id"].astype(str).isin(keep_events)].copy()
+
+
+def _informative_capacity_for_y(df: pd.DataFrame, *, y_col: str) -> Dict[str, int]:
+    if y_col not in df.columns:
+        return {
+            "n_two_alt_events": 0,
+            "n_informative_events": 0,
+            "n_policy_docs_informative": 0,
+        }
+    use = df[["event_id", "policy_document_id", y_col]].copy()
+    use[y_col] = pd.to_numeric(use[y_col], errors="coerce").fillna(0.0)
+    n_two_alt_events = 0
+    informative_events = 0
+    informative_docs: List[str] = []
+    for _, g in use.groupby("event_id", dropna=False):
+        if len(g) != 2:
+            continue
+        n_two_alt_events += 1
+        if int(g[y_col].sum()) != 1:
+            continue
+        informative_events += 1
+        informative_docs.append(str(g["policy_document_id"].iloc[0]))
+    return {
+        "n_two_alt_events": int(n_two_alt_events),
+        "n_informative_events": int(informative_events),
+        "n_policy_docs_informative": int(len(set(informative_docs))),
+    }
 
 
 def _build_row(
@@ -716,13 +744,53 @@ def run_key_factor_scan(
 
     candidate_plan: List[Dict[str, object]] = []
     skipped_candidates: List[Dict[str, object]] = []
+    skipped_track_contexts: List[Dict[str, object]] = []
     eq_seen: Dict[str, str] = {}
     track_split_cache: Dict[Tuple[str, str], pd.DataFrame] = {}
     for track in tracks:
         track_df = df[df["track"].astype(str) == track].copy()
         for split_role in ("discovery", "validation"):
             track_split_cache[(track, split_role)] = track_df[track_df["split_role"] == split_role].copy()
+    discovery_capacity_by_track_y: Dict[Tuple[str, str], Dict[str, int]] = {}
+    if config.skip_discovery_infeasible_track_y:
+        for track in tracks:
+            discovery_df = track_split_cache[(track, "discovery")]
+            for _, y_col in contexts:
+                key = (track, y_col)
+                if key in discovery_capacity_by_track_y:
+                    continue
+                discovery_capacity_by_track_y[key] = _informative_capacity_for_y(
+                    discovery_df,
+                    y_col=y_col,
+                )
+    for track in tracks:
         for context_scope, y_col in contexts:
+            if config.skip_discovery_infeasible_track_y:
+                cap = discovery_capacity_by_track_y.get((track, y_col), {})
+                cap_events = int(cap.get("n_informative_events", 0))
+                cap_docs = int(cap.get("n_policy_docs_informative", 0))
+                low_events = cap_events < int(config.min_informative_events_estimable)
+                low_docs = cap_docs < int(config.min_policy_docs_informative_estimable)
+                if low_events or low_docs:
+                    fail_parts: List[str] = []
+                    if low_events:
+                        fail_parts.append(
+                            f"events {cap_events} < gate {int(config.min_informative_events_estimable)}"
+                        )
+                    if low_docs:
+                        fail_parts.append(
+                            f"policy_docs {cap_docs} < gate {int(config.min_policy_docs_informative_estimable)}"
+                        )
+                    skipped_track_contexts.append(
+                        {
+                            "track": track,
+                            "context_scope": context_scope,
+                            "y_col": y_col,
+                            "reason_code": "discovery_gate_infeasible_for_track_y",
+                            "reason_detail": "; ".join(fail_parts),
+                        }
+                    )
+                    continue
             for spec_id, controls in control_specs:
                 fdr_family_id = f"{track}|{context_scope}|{y_col}|{spec_id}"
                 for feature in allowed_features:
@@ -973,6 +1041,31 @@ def run_key_factor_scan(
                 "spec_id": "",
                 "key_factor": "",
                 "status": "skipped_context",
+                "reason_stage": "plan",
+                "reason_code": skipped.get("reason_code"),
+                "reason_detail": skipped.get("reason_detail"),
+                "bootstrap_success": None,
+                "bootstrap_attempted": None,
+                "candidate_eval_order": None,
+                "candidate_pool_size": candidate_pool_size,
+                "equivalence_hash": "",
+                "validation_used_for_search": int(bool(config.validation_used_for_search)),
+                "candidate_pool_locked_pre_validation": int(bool(config.candidate_pool_locked_pre_validation)),
+                "timestamp": config.timestamp,
+            }
+        )
+    for skipped in skipped_track_contexts:
+        search_log_rows.append(
+            {
+                "run_id": config.run_id,
+                "candidate_id": "",
+                "track": skipped.get("track"),
+                "context_scope": skipped.get("context_scope"),
+                "y_col": skipped.get("y_col"),
+                "split_role": "plan",
+                "spec_id": "",
+                "key_factor": "",
+                "status": "skipped_track_context",
                 "reason_stage": "plan",
                 "reason_code": skipped.get("reason_code"),
                 "reason_detail": skipped.get("reason_detail"),
