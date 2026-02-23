@@ -135,15 +135,18 @@ Optional robustness flags:
 --enforce-track-consensus \
 --consensus-anchor-track primary_strict \
 --consensus-min-anchor-tier validated_candidate \
---out-restart-stability-csv outputs/tables/custom_restart_stability.csv
+--out-restart-stability-csv outputs/tables/custom_restart_stability.csv \
+--confirmatory-y-cols y_all \
+--nonconfirmatory-max-tier support_candidate
 ```
 
 - `--auto-scale-y-validated-gates`: adapts validated gates per `y_col` using validation capacity.
 - `--y-feasibility-mode`: `warn` | `fail_unusable` | `fail_below_floor`; choose fail-fast policy for low-capacity Y contexts.
 - `--scan-family-dedupe-mode atom`: keeps one representative feature per atom family (reduces expression over-crowding).
-- `--auto-bootstrap-escalation`: reruns borderline validation candidates with higher bootstrap.
+- `--auto-bootstrap-escalation`: reruns borderline validation candidates with higher bootstrap (shortlist is selected from inference-aggregated top models when available).
 - `--enforce-track-consensus`: demotes non-anchor validated candidates when the anchor track does not reach required tier.
 - `--out-restart-stability-csv`: writes per-candidate restart stability diagnostics for reproducibility monitoring.
+- `--confirmatory-y-cols` / `--nonconfirmatory-max-tier`: restrict which `y_col` contexts are eligible for confirmatory validation tiering in inference aggregation.
 
 ## TwinPaper example (CLI, real paths)
 
@@ -216,7 +219,9 @@ cd /home/kimyoungjin06/Desktop/Workspace/1.2.8.TwinPaper
 ```
 
 Refinement artifacts are written with `_<suffix>` added to each output path
-(for example `..._scan_runs_..._refine.csv`).
+(for example `..._scan_runs_..._refine.csv`, `..._top_models_..._refine.csv`, and `..._top_models_..._refine_inference.csv`).
+If `--auto-bootstrap-escalation` executes, escalation outputs follow the same pattern with `_escalate` suffix,
+including `..._top_models_..._escalate_inference.csv`.
 
 ## Short command (preset launcher)
 
