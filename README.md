@@ -44,6 +44,7 @@ Execution contracts for upcoming API/UI work:
 - `docs/CONTRACTS.md`
 - `regspec_machine/contracts.py`
 - `regspec_machine/engine.py` (L2 facade: request -> execute -> status/result)
+- `regspec_machine/orchestrator.py` (L3 lifecycle manager: submit/execute/retry/cancel)
 
 ## Install (editable)
 
@@ -120,6 +121,19 @@ Shortcut wrappers (baseline defaults):
 - `engine.run_nooption(run_id=...)` -> `nooption_baseline`
 - `engine.run_singlex(run_id=...)` -> `singlex_baseline`
 - `engine.run_paired(run_id=...)` -> `paired_nooption_singlex`
+
+## Programmatic workflow orchestration (L3)
+
+```python
+from regspec_machine import PresetEngine, RunOrchestrator
+
+engine = PresetEngine(workspace_root="/path/to/TwinPaper")
+orch = RunOrchestrator(engine=engine, max_attempts=2)
+
+status = orch.submit({"mode": "paired_nooption_singlex", "run_id": "phase_b_pair_l3_example"})
+execution = orch.execute(status.run_id)
+print(execution.status.state)
+```
 
 `load_and_prepare_data()` maps outcomes as:
 - `y_all` from `reference_dik`
@@ -268,7 +282,7 @@ cd /home/kimyoungjin06/Desktop/Workspace/1.2.8.TwinPaper
 ```
 
 Modes:
-- `paired_nooption_singlex`: run `nooption_baseline` then `singlex_baseline` in one command, and auto-write a direction-review JSON (`validated/p/q/restart-stability/singlex consensus`)
+- `paired_nooption_singlex`: run `nooption_baseline` then `singlex_baseline` in one command, auto-align both branches to `y_all` context by default, and auto-write a direction-review JSON (`validated/p/q/restart-stability/singlex consensus + promotion gates`)
 - `paired_nooption_singlex_hypothesis`: run `nooption_hypothesis_panel` then `singlex_hypothesis_panel` (windowed hypothesis panel: `y_3y,y_5y,y_10y`), and auto-write the same direction-review JSON
 - `nooption`: minimal runner path without exploration shortcuts
 - `nooption_baseline`: nooption path with governance baseline (`n_restarts=5`, auto y-gate scaling, fail on unusable Y, skip discovery-infeasible track×Y blocks, auto-disable plus-base spec under low discovery capacity)
@@ -287,6 +301,8 @@ Useful overrides:
 - `--out-direction-review-json <path>` (for paired modes, writes automated direction-review summary JSON)
 - `--skip-direction-review` (for paired modes, disables auto direction-review summary generation)
 - `--paired-legacy-sync-validation` (for `paired_nooption_singlex`, forwards `--legacy-single-gate-sync-validation` to child runner calls)
+- `--paired-y-context-alignment y_all_only|off` (default `y_all_only`; paired baseline only)
+- `--no-paired-run-singlex-on-nooption-failure` (default behavior is to run `singlex` even if `nooption` fails)
 - `--hypothesis-window-years 3,5,10` (for `*_hypothesis_panel` modes; forwarded in paired hypothesis mode)
 - `--hypothesis-confirmatory-window-years 3,5` (default for `*_hypothesis_panel`; avoids redundant confirmatory `y_10y` in current dataset)
 - `--hypothesis-time-series-precheck-mode fail_redundant_confirmatory` (default for `*_hypothesis_panel`; fail-fast only on redundant confirmatory windows)
@@ -328,6 +344,10 @@ cd /home/kimyoungjin06/Desktop/Workspace/1.2.8.TwinPaper
 
 Default direction-review output is:
 - `data/metadata/phase_b_bikard_machine_scientist_direction_review_<run_id>.json`
+
+Primary checks now include:
+- execution checks: `all_children_ok`, `required_fields_present`, `singlex_track_consensus_check_pass`
+- promotion checks: `nooption_primary_validated_gate_pass`, `nooption_q_gate_pass`, `nooption_restart_validated_rate_gate_pass`, `nooption_promotion_gate_pass`, `primary_objective_gate_pass`
 
 ## Recommended paired hypothesis panel (TwinPaper)
 

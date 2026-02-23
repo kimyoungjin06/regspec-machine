@@ -93,3 +93,13 @@ Result fields:
   - dispatches preset CLI execution (`scripts/modeling/run_phase_b_regspec_preset.py`)
   - returns `RunStatusContract` + `RunResultContract` via `EngineExecution`
   - supports baseline shortcuts: `run_nooption`, `run_singlex`, `run_paired`
+
+## 7) L3 orchestration
+
+- `regspec_machine/orchestrator.py` provides `RunOrchestrator`:
+  - `submit()` -> `queued`
+  - `execute()` -> `running` -> `succeeded/failed`
+  - `retry()` for failed/cancelled runs (attempt-bounded)
+  - `cancel()` for queued/running runs
+- Orchestrator stores per-run snapshots (`request/status/result/command/stdout_tail/stderr_tail`)
+- Optional `events_jsonl` appends lifecycle events for audit/resume tooling.

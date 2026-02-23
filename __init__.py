@@ -5,12 +5,15 @@ Standalone usage should prefer `regspec_machine`.
 
 from .regspec_machine import (  # noqa: F401
     CommandResult,
+    ExecutionEngine,
     EngineExecution,
     NONCONFIRMATORY_MAX_TIERS,
     PresetEngine,
     REQUIRED_COLUMNS,
+    RunOrchestrator,
     RUN_MODES,
     RUN_STATE_VALUES,
+    RunSnapshot,
     ScanConfig,
     TIME_SERIES_AUTO_POLICY_MODES,
     TIME_SERIES_PRECHECK_MODES,
@@ -33,12 +36,15 @@ from .regspec_machine import (  # noqa: F401
 
 __all__ = [
     "CommandResult",
+    "ExecutionEngine",
     "EngineExecution",
     "NONCONFIRMATORY_MAX_TIERS",
     "PresetEngine",
     "REQUIRED_COLUMNS",
+    "RunOrchestrator",
     "RUN_MODES",
     "RUN_STATE_VALUES",
+    "RunSnapshot",
     "ScanConfig",
     "TIME_SERIES_AUTO_POLICY_MODES",
     "TIME_SERIES_PRECHECK_MODES",

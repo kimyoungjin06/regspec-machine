@@ -21,6 +21,7 @@ from .contracts import (
 )
 from .engine import CommandResult, EngineExecution, PresetEngine
 from .feature_registry import build_feature_registry, load_feature_registry
+from .orchestrator import ExecutionEngine, RunOrchestrator, RunSnapshot
 from .shortlist import select_shortlist_features_from_top_models
 from .splitter import apply_policy_split_file, assign_policy_document_holdout
 from .search_engine import ScanConfig, run_key_factor_scan
@@ -30,9 +31,12 @@ __all__ = [
     "EngineExecution",
     "NONCONFIRMATORY_MAX_TIERS",
     "PresetEngine",
+    "ExecutionEngine",
     "REQUIRED_COLUMNS",
+    "RunOrchestrator",
     "RUN_MODES",
     "RUN_STATE_VALUES",
+    "RunSnapshot",
     "ScanConfig",
     "TIME_SERIES_AUTO_POLICY_MODES",
     "TIME_SERIES_PRECHECK_MODES",
