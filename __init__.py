@@ -4,7 +4,10 @@ Standalone usage should prefer `regspec_machine`.
 """
 
 from .regspec_machine import (  # noqa: F401
+    CommandResult,
+    EngineExecution,
     NONCONFIRMATORY_MAX_TIERS,
+    PresetEngine,
     REQUIRED_COLUMNS,
     RUN_MODES,
     RUN_STATE_VALUES,
@@ -29,7 +32,10 @@ from .regspec_machine import (  # noqa: F401
 )
 
 __all__ = [
+    "CommandResult",
+    "EngineExecution",
     "NONCONFIRMATORY_MAX_TIERS",
+    "PresetEngine",
     "REQUIRED_COLUMNS",
     "RUN_MODES",
     "RUN_STATE_VALUES",

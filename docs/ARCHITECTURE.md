@@ -19,6 +19,7 @@
 - `top_rows`: candidate-level summary from discovery + validation evidence
 - `search_log`: execution trace for candidate plan and quality checks
 - `RunRequestContract` / `RunStatusContract` / `RunResultContract`: L1 execution contracts for CLI/API/UI parity (`contracts.py`, `docs/CONTRACTS.md`)
+- `PresetEngine`: L2 execution facade over preset CLI for `nooption/singlex/paired` with contract I/O (`engine.py`)
 
 ## Non-goals
 

@@ -43,6 +43,7 @@ Direction-review order (mandatory):
 Execution contracts for upcoming API/UI work:
 - `docs/CONTRACTS.md`
 - `regspec_machine/contracts.py`
+- `regspec_machine/engine.py` (L2 facade: request -> execute -> status/result)
 
 ## Install (editable)
 
@@ -96,6 +97,29 @@ config = ScanConfig(
 )
 scan_rows, top_rows, search_log = run_key_factor_scan(df=data, feature_registry=feature_registry, config=config)
 ```
+
+## Programmatic preset execution (L2 facade)
+
+```python
+from regspec_machine import PresetEngine, RunRequestContract
+
+engine = PresetEngine(workspace_root="/path/to/TwinPaper")
+request = RunRequestContract.from_payload(
+    {
+        "mode": "paired_nooption_singlex",
+        "run_id": "phase_b_pair_example_20260224",
+        "scan_n_bootstrap": 49,
+    }
+)
+execution = engine.execute(request)
+print(execution.status.state)
+print(execution.result.governance_checks)
+```
+
+Shortcut wrappers (baseline defaults):
+- `engine.run_nooption(run_id=...)` -> `nooption_baseline`
+- `engine.run_singlex(run_id=...)` -> `singlex_baseline`
+- `engine.run_paired(run_id=...)` -> `paired_nooption_singlex`
 
 `load_and_prepare_data()` maps outcomes as:
 - `y_all` from `reference_dik`

@@ -86,3 +86,10 @@ Result fields:
 - API layer (L4) should reuse this contract module directly.
 - CLI and API should produce equivalent payloads for the same run.
 
+## 6) L2 facade
+
+- `regspec_machine/engine.py` provides `PresetEngine`, a contract-first facade that:
+  - accepts `RunRequestContract`
+  - dispatches preset CLI execution (`scripts/modeling/run_phase_b_regspec_preset.py`)
+  - returns `RunStatusContract` + `RunResultContract` via `EngineExecution`
+  - supports baseline shortcuts: `run_nooption`, `run_singlex`, `run_paired`
