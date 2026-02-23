@@ -40,6 +40,10 @@ Direction-review order (mandatory):
 - `tests/`: smoke tests for split/summary behavior
 - `*.py` at repository root: legacy compatibility wrappers for old import paths
 
+Execution contracts for upcoming API/UI work:
+- `docs/CONTRACTS.md`
+- `regspec_machine/contracts.py`
+
 ## Install (editable)
 
 ```bash
