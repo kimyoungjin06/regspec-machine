@@ -10,13 +10,17 @@ It focuses on one job: searching regression specifications while enforcing audit
 ## Project Priority (TwinPaper)
 
 For TwinPaper operations, the first goal is:
-- build and tune the module so that the **hypothesis-first singleton path (`singlex`)** is as strong and reproducible as possible.
+- build and tune the module so that **both**:
+  - the no-option path (`nooption`), and
+  - the hypothesis-first singleton path (`singlex`)
+  are strong and reproducible.
 
 Direction-review order (mandatory):
-1. run `singlex` baseline for current code
-2. apply one change set
-3. rerun `singlex` and compare `validated_candidate`, `p/q`, and restart stability
-4. only then run open-explore for secondary insight
+1. run `nooption` baseline for current code
+2. run `singlex` baseline for current code
+3. apply one change set
+4. rerun `nooption` + `singlex` and compare `validated_candidate`, `p/q`, and restart stability
+5. only then run open-explore for secondary insight
 
 ## Core guardrails
 
@@ -223,9 +227,12 @@ cd /home/kimyoungjin06/Desktop/Workspace/1.2.8.TwinPaper
 ```
 
 Modes:
+- `paired_nooption_singlex`: run `nooption` then `singlex_baseline` in one command
+- `nooption`: minimal runner path without exploration shortcuts
 - `openexplore_autorefine`: stage-1 open explore + stage-2 shortlist refinement
 - `openexplore`: only stage-1 open explore
 - `singlex`: only `is_academia_origin` hypothesis run
+- `singlex_baseline`: singleton hypothesis run with governance baseline (`n_restarts=5`, consensus, y-feasibility fail-fast)
 
 Useful overrides:
 - `--run-id <custom_id>`
@@ -249,6 +256,18 @@ cd /home/kimyoungjin06/Desktop/Workspace/1.2.8.TwinPaper
   --extra-arg=--consensus-min-anchor-tier --extra-arg=support_candidate \
   --extra-arg=--auto-scale-y-validated-gates \
   --extra-arg=--y-feasibility-mode --extra-arg=fail_below_floor
+```
+
+## Recommended paired baseline (TwinPaper)
+
+Run both baseline paths together at the start of each direction review:
+
+```bash
+cd /home/kimyoungjin06/Desktop/Workspace/1.2.8.TwinPaper
+.venv/bin/python scripts/modeling/run_phase_b_regspec_preset.py \
+  --mode paired_nooption_singlex \
+  --run-id phase_b_bikard_keyfactor_scan_pair_baseline_<date> \
+  --scan-n-bootstrap 49
 ```
 
 ## Legacy compatibility
