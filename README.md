@@ -172,11 +172,13 @@ Main endpoints:
 - `GET /runs/{run_id}/result` (result)
 - `GET /runs/{run_id}/summary` (compact result view)
 - `GET /runs/{run_id}/review` (core review panel: `validated/p/q/restart/consensus`)
+- `POST /compare/export` (write nooption-vs-singlex compare summary to `outputs/reports/regspec_compare/*.json|*.md`)
 - `POST /runs/{run_id}/cancel` (cancel queued/running)
 - `POST /runs/{run_id}/retry` (retry failed/cancelled)
 - `GET /runs/{run_id}/artifacts` (artifact manifest + existence checks)
 - `GET /ui` (L5 browser console: submit + monitor + summary inspect)
   - run detail panel includes quick KPI cards (`validated`, `best p/q`, `restart`, leakage guard, consensus)
+  - baseline compare panel supports `Save compare to outputs/` for standard-path archival
 
 ## Local Console Launcher (L6.1)
 

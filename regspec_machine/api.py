@@ -7,7 +7,9 @@ agent/UI integrations.
 
 import csv
 from datetime import datetime, timezone
+import json
 from pathlib import Path
+import re
 from typing import Any, Dict, Mapping, Optional
 
 from .contracts import RUN_MODES, RunRequestContract
@@ -69,6 +71,31 @@ def _safe_float(value: Any) -> Optional[float]:
     if out != out:  # NaN
         return None
     return out
+
+
+def _safe_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except Exception:
+        return int(default)
+
+
+def _safe_bool(value: Any) -> Optional[bool]:
+    if value is True:
+        return True
+    if value is False:
+        return False
+    if value in (1, "1", "true", "TRUE", "True"):
+        return True
+    if value in (0, "0", "false", "FALSE", "False"):
+        return False
+    return None
+
+
+def _slug(text: str) -> str:
+    cleaned = re.sub(r"[^a-zA-Z0-9._-]+", "_", str(text).strip())
+    cleaned = re.sub(r"_+", "_", cleaned).strip("_")
+    return cleaned or "run"
 
 
 def _extract_review_metrics(*, workspace_root: Path, artifacts: Mapping[str, str]) -> Dict[str, Any]:
@@ -204,6 +231,171 @@ def _build_review_payload(
             "singlex_track_consensus_check_pass": paired_consensus_pass,
         },
         "artifacts": artifacts,
+    }
+
+
+def _extract_compare_branch(review: Mapping[str, Any]) -> Dict[str, Any]:
+    metrics = review.get("metrics", {})
+    governance = review.get("governance", {})
+    return {
+        "run_id": str(review.get("run_id", "")),
+        "mode": str(review.get("mode", "")),
+        "state": str(review.get("state", "")),
+        "validated_candidate_count": _safe_int(metrics.get("validated_candidate_count"), 0),
+        "support_candidate_count": _safe_int(metrics.get("support_candidate_count"), 0),
+        "best_p_validation": _safe_float(metrics.get("best_p_validation")),
+        "best_q_validation": _safe_float(metrics.get("best_q_validation")),
+        "restart_validated_rate_max": _safe_float(metrics.get("restart_validated_rate_max")),
+        "restart_validated_rate_mean": _safe_float(metrics.get("restart_validated_rate_mean")),
+        "validation_used_for_search_false": bool(governance.get("validation_used_for_search_false") is True),
+        "candidate_pool_locked_pre_validation_true": bool(
+            governance.get("candidate_pool_locked_pre_validation_true") is True
+        ),
+        "track_consensus_enforced": _safe_bool(governance.get("track_consensus_enforced")),
+    }
+
+
+def _build_compare_checks(
+    *,
+    nooption_branch: Mapping[str, Any],
+    singlex_branch: Mapping[str, Any],
+) -> Dict[str, Any]:
+    no_state_ok = str(nooption_branch.get("state", "")).strip().lower() == "succeeded"
+    sx_state_ok = str(singlex_branch.get("state", "")).strip().lower() == "succeeded"
+    both_succeeded = bool(no_state_ok and sx_state_ok)
+
+    no_gov_pass = bool(
+        nooption_branch.get("validation_used_for_search_false") is True
+        and nooption_branch.get("candidate_pool_locked_pre_validation_true") is True
+    )
+    sx_gov_pass = bool(
+        singlex_branch.get("validation_used_for_search_false") is True
+        and singlex_branch.get("candidate_pool_locked_pre_validation_true") is True
+    )
+    all_governance_pass = bool(no_gov_pass and sx_gov_pass)
+
+    no_validated_gate = _safe_int(nooption_branch.get("validated_candidate_count"), 0) > 0
+    no_q = _safe_float(nooption_branch.get("best_q_validation"))
+    no_q_gate = bool(no_q is not None and no_q <= 0.10)
+    no_restart = _safe_float(nooption_branch.get("restart_validated_rate_max"))
+    no_restart_gate = bool(no_restart is not None and no_restart >= 0.50)
+
+    singlex_consensus = bool(singlex_branch.get("track_consensus_enforced") is True)
+
+    nooption_promotion_gate_pass = bool(
+        all_governance_pass and no_validated_gate and no_q_gate and no_restart_gate
+    )
+    primary_objective_gate_pass = bool(
+        both_succeeded and all_governance_pass and singlex_consensus and nooption_promotion_gate_pass
+    )
+
+    return {
+        "both_succeeded": both_succeeded,
+        "nooption_governance_pass": no_gov_pass,
+        "singlex_governance_pass": sx_gov_pass,
+        "all_governance_pass": all_governance_pass,
+        "singlex_track_consensus_check_pass": singlex_consensus,
+        "nooption_primary_validated_gate_pass": no_validated_gate,
+        "nooption_q_gate_pass": no_q_gate,
+        "nooption_restart_validated_rate_gate_pass": no_restart_gate,
+        "nooption_promotion_gate_pass": nooption_promotion_gate_pass,
+        "primary_objective_gate_pass": primary_objective_gate_pass,
+    }
+
+
+def _build_compare_payload(
+    *,
+    nooption_review: Mapping[str, Any],
+    singlex_review: Mapping[str, Any],
+) -> Dict[str, Any]:
+    nooption_branch = _extract_compare_branch(nooption_review)
+    singlex_branch = _extract_compare_branch(singlex_review)
+    checks = _build_compare_checks(
+        nooption_branch=nooption_branch,
+        singlex_branch=singlex_branch,
+    )
+    return {
+        "generated_at_utc": _utc_now_isoz(),
+        "nooption": nooption_branch,
+        "singlex": singlex_branch,
+        "checks": checks,
+    }
+
+
+def _render_compare_markdown(payload: Mapping[str, Any]) -> str:
+    nooption = payload.get("nooption", {})
+    singlex = payload.get("singlex", {})
+    checks = payload.get("checks", {})
+    lines = [
+        "# Baseline Compare Summary",
+        "",
+        f"- generated_at_utc: {payload.get('generated_at_utc', '-')}",
+        f"- nooption_run_id: {nooption.get('run_id', '-')}",
+        f"- singlex_run_id: {singlex.get('run_id', '-')}",
+        "",
+        "## Checks",
+        "",
+    ]
+    for key in (
+        "both_succeeded",
+        "nooption_governance_pass",
+        "singlex_governance_pass",
+        "all_governance_pass",
+        "singlex_track_consensus_check_pass",
+        "nooption_primary_validated_gate_pass",
+        "nooption_q_gate_pass",
+        "nooption_restart_validated_rate_gate_pass",
+        "nooption_promotion_gate_pass",
+        "primary_objective_gate_pass",
+    ):
+        lines.append(f"- {key}: {checks.get(key)}")
+    lines.extend(
+        [
+            "",
+            "## Branch Metrics",
+            "",
+            "| metric | nooption | singlex |",
+            "| --- | --- | --- |",
+        ]
+    )
+    for key in (
+        "state",
+        "validated_candidate_count",
+        "support_candidate_count",
+        "best_p_validation",
+        "best_q_validation",
+        "restart_validated_rate_max",
+        "restart_validated_rate_mean",
+        "validation_used_for_search_false",
+        "candidate_pool_locked_pre_validation_true",
+        "track_consensus_enforced",
+    ):
+        lines.append(f"| {key} | {nooption.get(key)} | {singlex.get(key)} |")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _write_compare_exports(
+    *,
+    workspace_root: Path,
+    payload: Mapping[str, Any],
+) -> Dict[str, str]:
+    no_id = _slug(str(payload.get("nooption", {}).get("run_id", "")))
+    sx_id = _slug(str(payload.get("singlex", {}).get("run_id", "")))
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    base = f"compare_{no_id}__vs__{sx_id}_{stamp}"
+    out_dir = workspace_root / "outputs" / "reports" / "regspec_compare"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    json_path = out_dir / f"{base}.json"
+    md_path = out_dir / f"{base}.md"
+    json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    md_path.write_text(_render_compare_markdown(payload), encoding="utf-8")
+
+    return {
+        "output_dir": str(out_dir),
+        "json": str(json_path),
+        "markdown": str(md_path),
     }
 
 
@@ -390,6 +582,51 @@ def create_app(
         return {
             "status": status.as_dict(),
             "review": review,
+        }
+
+    @app.post("/compare/export")
+    def export_compare(payload: Dict[str, Any]) -> Dict[str, Any]:
+        nooption_run_id = str(payload.get("nooption_run_id", "")).strip()
+        singlex_run_id = str(payload.get("singlex_run_id", "")).strip()
+        if not nooption_run_id or not singlex_run_id:
+            raise HTTPException(
+                status_code=422,
+                detail="nooption_run_id and singlex_run_id are required",
+            )
+
+        nooption_status = orch.get_status(nooption_run_id)
+        if nooption_status is None:
+            raise HTTPException(status_code=404, detail=f"run not found: {nooption_run_id}")
+        singlex_status = orch.get_status(singlex_run_id)
+        if singlex_status is None:
+            raise HTTPException(status_code=404, detail=f"run not found: {singlex_run_id}")
+
+        nooption_result = orch.get_result(nooption_run_id)
+        if nooption_result is None:
+            raise HTTPException(status_code=409, detail=f"run result not ready: {nooption_run_id}")
+        singlex_result = orch.get_result(singlex_run_id)
+        if singlex_result is None:
+            raise HTTPException(status_code=409, detail=f"run result not ready: {singlex_run_id}")
+
+        workspace = _workspace_root()
+        nooption_review = _build_review_payload(
+            workspace_root=workspace,
+            result_payload=nooption_result.as_dict(),
+        )
+        singlex_review = _build_review_payload(
+            workspace_root=workspace,
+            result_payload=singlex_result.as_dict(),
+        )
+        compare_payload = _build_compare_payload(
+            nooption_review=nooption_review,
+            singlex_review=singlex_review,
+        )
+        files = _write_compare_exports(workspace_root=workspace, payload=compare_payload)
+        return {
+            "nooption_run_id": nooption_run_id,
+            "singlex_run_id": singlex_run_id,
+            "comparison": compare_payload,
+            "outputs": files,
         }
 
     @app.post("/runs/{run_id}/cancel")

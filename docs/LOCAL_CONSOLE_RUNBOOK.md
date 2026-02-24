@@ -43,3 +43,16 @@ Default endpoint:
 1. Open `/ui` and submit a dry run.
 2. Verify run appears in monitor table.
 3. Open summary panel and confirm `state` transitions.
+
+## Baseline Compare Export (Standard Path)
+
+After comparing `nooption` vs `singlex` in `/ui`, use:
+
+- `Save compare to outputs/`
+
+This writes both files to:
+
+- `outputs/reports/regspec_compare/*.json`
+- `outputs/reports/regspec_compare/*.md`
+
+The export includes governance and promotion checks, and blocks promotion when either branch fails governance.

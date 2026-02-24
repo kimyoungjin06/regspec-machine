@@ -306,6 +306,7 @@ def test_api_ui_endpoint_serves_html_console() -> None:
     assert "compare_tbody" in resp.text
     assert "Direction Review Hints" in resp.text
     assert "compare_interp_list" in resp.text
+    assert "save_compare_outputs_btn" in resp.text
     assert "export_compare_md_btn" in resp.text
     assert "export_compare_json_btn" in resp.text
 
@@ -437,3 +438,149 @@ def test_api_review_endpoint_ignores_non_ok_validation_rows(tmp_path: Path) -> N
     assert metrics["support_candidate_count"] == 1
     assert metrics["best_p_validation"] == 0.05
     assert metrics["best_q_validation"] == 0.10
+
+
+def test_api_compare_export_blocks_promotion_when_any_governance_fails(tmp_path: Path) -> None:
+    class _CompareExportEngine:
+        def __init__(self, workspace_root: Path) -> None:
+            self.workspace_root = workspace_root
+
+        def execute(self, request: RunRequestContract, *, dry_run: bool = False) -> EngineExecution:
+            top_rel = f"outputs/tables/{request.run_id}_top_inference.csv"
+            rst_rel = f"data/metadata/{request.run_id}_restart.csv"
+            top_path = self.workspace_root / top_rel
+            rst_path = self.workspace_root / rst_rel
+            top_path.parent.mkdir(parents=True, exist_ok=True)
+            rst_path.parent.mkdir(parents=True, exist_ok=True)
+
+            if "nooption" in request.run_id:
+                top_path.write_text(
+                    "\n".join(
+                        [
+                            "candidate_id,candidate_tier,p_boot_validation,q_value_validation,status_validation,track",
+                            "no_c1,validated_candidate,0.01,0.03,ok,primary_strict",
+                        ]
+                    )
+                    + "\n",
+                    encoding="utf-8",
+                )
+                rst_path.write_text(
+                    "\n".join(
+                        [
+                            "candidate_id,validated_rate,support_or_better_rate",
+                            "no_c1,0.90,1.0",
+                        ]
+                    )
+                    + "\n",
+                    encoding="utf-8",
+                )
+                governance_checks = {
+                    "search_governance": {
+                        "validation_used_for_search": False,
+                        "candidate_pool_locked_pre_validation": True,
+                    },
+                    "track_consensus_meta": {
+                        "enforce_track_consensus": False,
+                        "n_rows_demoted_from_validated": 0,
+                    },
+                }
+            else:
+                top_path.write_text(
+                    "\n".join(
+                        [
+                            "candidate_id,candidate_tier,p_boot_validation,q_value_validation,status_validation,track",
+                            "sx_c1,support_candidate,0.20,0.20,ok,primary_strict",
+                        ]
+                    )
+                    + "\n",
+                    encoding="utf-8",
+                )
+                rst_path.write_text(
+                    "\n".join(
+                        [
+                            "candidate_id,validated_rate,support_or_better_rate",
+                            "sx_c1,0.00,1.0",
+                        ]
+                    )
+                    + "\n",
+                    encoding="utf-8",
+                )
+                governance_checks = {
+                    "search_governance": {
+                        "validation_used_for_search": False,
+                        "candidate_pool_locked_pre_validation": False,
+                    },
+                    "track_consensus_meta": {
+                        "enforce_track_consensus": True,
+                        "n_rows_demoted_from_validated": 0,
+                    },
+                }
+
+            status = RunStatusContract.create(
+                run_id=request.run_id,
+                mode=request.mode,
+                state="succeeded",
+                progress_stage="completed",
+                progress_message="done",
+                progress_fraction=1.0,
+            )
+            result = RunResultContract.create(
+                run_id=request.run_id,
+                mode=request.mode,
+                state="succeeded",
+                artifacts=RunArtifactsContract(
+                    top_models_inference_csv=top_rel,
+                    restart_stability_csv=rst_rel,
+                ),
+                governance_checks=governance_checks,
+            )
+            return EngineExecution(
+                request=request,
+                command=("fake", request.mode),
+                returncode=0,
+                status=status,
+                result=result,
+                stdout="ok",
+                stderr="",
+            )
+
+    orch = RunOrchestrator(engine=_CompareExportEngine(workspace_root=tmp_path))
+    app = create_app(orchestrator=orch)
+    client = TestClient(app)
+
+    client.post(
+        "/runs?execute=false",
+        json={"mode": "nooption_baseline", "run_id": "ut_compare_nooption"},
+    )
+    client.post(
+        "/runs?execute=false",
+        json={"mode": "singlex_baseline", "run_id": "ut_compare_singlex"},
+    )
+    orch.execute("ut_compare_nooption")
+    orch.execute("ut_compare_singlex")
+
+    resp = client.post(
+        "/compare/export",
+        json={
+            "nooption_run_id": "ut_compare_nooption",
+            "singlex_run_id": "ut_compare_singlex",
+        },
+    )
+    assert resp.status_code == 200
+    payload = resp.json()
+    checks = payload["comparison"]["checks"]
+
+    assert checks["both_succeeded"] is True
+    assert checks["nooption_governance_pass"] is True
+    assert checks["singlex_governance_pass"] is False
+    assert checks["all_governance_pass"] is False
+    assert checks["nooption_primary_validated_gate_pass"] is True
+    assert checks["nooption_q_gate_pass"] is True
+    assert checks["nooption_restart_validated_rate_gate_pass"] is True
+    assert checks["nooption_promotion_gate_pass"] is False
+    assert checks["primary_objective_gate_pass"] is False
+
+    out_json = Path(payload["outputs"]["json"])
+    out_md = Path(payload["outputs"]["markdown"])
+    assert out_json.is_file()
+    assert out_md.is_file()

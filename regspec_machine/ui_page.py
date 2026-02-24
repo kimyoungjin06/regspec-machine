@@ -586,6 +586,7 @@ __STATE_OPTIONS__
       <div class="toolbar">
         <button id="compare_btn">Compare Runs</button>
         <button id="compare_from_detail_btn" class="ghost">Use detail run as pair key</button>
+        <button id="save_compare_outputs_btn" class="secondary" disabled>Save compare to outputs/</button>
         <button id="export_compare_md_btn" class="ghost" disabled>Export compare.md</button>
         <button id="export_compare_json_btn" class="ghost" disabled>Export compare.json</button>
       </div>
@@ -783,6 +784,7 @@ __STATE_OPTIONS__
 
     function updateCompareExportButtons() {
       const disabled = UI_STATE.compareBusy || !hasCompareSnapshot();
+      byId("save_compare_outputs_btn").disabled = disabled;
       byId("export_compare_md_btn").disabled = disabled;
       byId("export_compare_json_btn").disabled = disabled;
     }
@@ -993,6 +995,30 @@ __STATE_OPTIONS__
       const file = buildCompareExportBaseName(snapshot) + ".md";
       downloadTextFile(file, renderCompareMarkdown(payload), "text/markdown");
       setNotice(byId("compare_notice"), "ok", "exported: " + file);
+    }
+
+    async function saveCompareOutputsToWorkspace() {
+      const snapshot = getCompareSnapshotForExport();
+      const payload = {
+        nooption_run_id: String(snapshot.nooption && snapshot.nooption.run_id || "").trim(),
+        singlex_run_id: String(snapshot.singlex && snapshot.singlex.run_id || "").trim(),
+      };
+      if (!payload.nooption_run_id || !payload.singlex_run_id) {
+        throw new Error("compare snapshot is missing run ids");
+      }
+      const out = await fetchJson("/compare/export", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const outputs = out && out.outputs ? out.outputs : {};
+      const jsonPath = String(outputs.json || "").trim();
+      const mdPath = String(outputs.markdown || "").trim();
+      setNotice(
+        byId("compare_notice"),
+        "ok",
+        "saved to outputs: " + (jsonPath || "-") + " / " + (mdPath || "-")
+      );
     }
 
     function validateRunId(runId) {
@@ -1892,6 +1918,11 @@ __STATE_OPTIONS__
       } catch (err) {
         setNotice(byId("compare_notice"), "error", String(err && err.message ? err.message : err));
       }
+    });
+    byId("save_compare_outputs_btn").addEventListener("click", () => {
+      saveCompareOutputsToWorkspace().catch((err) => {
+        setNotice(byId("compare_notice"), "error", String(err && err.message ? err.message : err));
+      });
     });
 
     byId("mode").addEventListener("change", updateModeHelp);
