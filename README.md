@@ -198,6 +198,14 @@ Portable fallback (if script entrypoint is not on PATH):
 python -m regspec_machine.launcher --workspace-root /path/to/TwinPaper --open-browser
 ```
 
+Export `/ui` as static HTML:
+
+```bash
+regspec-console --out-ui-html ./artifacts/regspec_console_ui.html --ui-html-only
+```
+
+If you also want to start server, omit `--ui-html-only`.
+
 ## Desktop Wrapper PoC (L6.2)
 
 Install desktop extras:
