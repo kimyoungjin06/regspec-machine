@@ -373,6 +373,42 @@ def build_ui_page_html(*, run_modes: Iterable[str]) -> str:
       background: #fff5f7;
       color: var(--fail);
     }
+    .compare-insight {
+      margin-top: 10px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #f8fbff;
+      padding: 10px;
+    }
+    .compare-insight h3 {
+      margin: 0 0 6px;
+      font-size: 13px;
+      font-family: "Space Grotesk", "IBM Plex Sans", sans-serif;
+      color: var(--ink);
+    }
+    .compare-insight ul {
+      margin: 0;
+      padding-left: 18px;
+      display: grid;
+      gap: 4px;
+    }
+    .compare-insight li {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.35;
+    }
+    .interp-ok {
+      color: var(--ok) !important;
+      font-weight: 600;
+    }
+    .interp-warn {
+      color: var(--warn) !important;
+      font-weight: 600;
+    }
+    .interp-fail {
+      color: var(--fail) !important;
+      font-weight: 600;
+    }
     .progress-meta {
       font-size: 11px;
       color: var(--muted);
@@ -564,6 +600,12 @@ __STATE_OPTIONS__
           </thead>
           <tbody id="compare_tbody"></tbody>
         </table>
+      </div>
+      <div class="compare-insight">
+        <h3>Direction Review Hints</h3>
+        <ul id="compare_interp_list">
+          <li>Compare runs to generate hints.</li>
+        </ul>
       </div>
     </section>
 
@@ -971,6 +1013,52 @@ __STATE_OPTIONS__
       return { text: "nooption better", cls: "compare-delta-down" };
     }
 
+    function appendCompareHint(listEl, text, level) {
+      const li = document.createElement("li");
+      li.textContent = text;
+      if (level === "ok") li.classList.add("interp-ok");
+      if (level === "warn") li.classList.add("interp-warn");
+      if (level === "fail") li.classList.add("interp-fail");
+      listEl.appendChild(li);
+    }
+
+    function qThresholdOrDefault(snap) {
+      const q = numericOrNull(snap && snap.q_threshold);
+      return q === null ? 0.1 : q;
+    }
+
+    function isGovernancePass(snap) {
+      return (
+        boolOrNull(snap && snap.consensus) === true &&
+        boolOrNull(snap && snap.leakage_guard) === true &&
+        boolOrNull(snap && snap.pool_lock) === true
+      );
+    }
+
+    function isQPass(snap) {
+      const q = numericOrNull(snap && snap.best_q);
+      if (q === null) return false;
+      return q <= qThresholdOrDefault(snap);
+    }
+
+    function scoreSnapshot(snap) {
+      let score = 0;
+      if (isGovernancePass(snap)) score += 4;
+      else score -= 4;
+
+      if (isQPass(snap)) score += 2;
+
+      const p = numericOrNull(snap && snap.best_p);
+      if (p !== null && p <= 0.05) score += 1;
+
+      const validated = numericOrNull(snap && snap.validated);
+      if (validated !== null && validated > 0) score += 1;
+
+      const restartMean = numericOrNull(snap && snap.restart_mean);
+      if (restartMean !== null && restartMean >= 0.6) score += 1;
+      return score;
+    }
+
     function inferPairRunIds(seedRunId) {
       const rid = validateRunId(seedRunId);
       const noSuffix = "__nooption_baseline";
@@ -1013,10 +1101,89 @@ __STATE_OPTIONS__
         best_q: numericOrNull(metrics.best_q_validation),
         restart_max: numericOrNull(metrics.restart_validated_rate_max),
         restart_mean: numericOrNull(metrics.restart_validated_rate_mean),
+        q_threshold: numericOrNull(metrics.q_threshold_validation ?? metrics.q_threshold),
         consensus: boolOrNull(gov.track_consensus_enforced),
         leakage_guard: boolOrNull(gov.validation_used_for_search_false),
         pool_lock: boolOrNull(gov.candidate_pool_locked_pre_validation_true),
       };
+    }
+
+    function renderCompareInterpretation(nooptionSnap, singlexSnap) {
+      const list = byId("compare_interp_list");
+      list.replaceChildren();
+
+      const noState = String(nooptionSnap.state || "").toLowerCase();
+      const sxState = String(singlexSnap.state || "").toLowerCase();
+      if (noState !== "succeeded" || sxState !== "succeeded") {
+        appendCompareHint(
+          list,
+          "One or both runs are not succeeded yet. Treat this board as interim only.",
+          "warn"
+        );
+      }
+
+      const noGov = isGovernancePass(nooptionSnap);
+      const sxGov = isGovernancePass(singlexSnap);
+      if (noGov && sxGov) {
+        appendCompareHint(list, "Governance gates pass on both runs.", "ok");
+      } else if (sxGov && !noGov) {
+        appendCompareHint(list, "Governance gates favor singlex (nooption has at least one fail).", "warn");
+      } else if (!sxGov && noGov) {
+        appendCompareHint(list, "Governance gates favor nooption (singlex has at least one fail).", "warn");
+      } else {
+        appendCompareHint(list, "Governance gates fail on both runs. Do not promote either result yet.", "fail");
+      }
+
+      const noQ = numericOrNull(nooptionSnap.best_q);
+      const sxQ = numericOrNull(singlexSnap.best_q);
+      const noQThr = qThresholdOrDefault(nooptionSnap);
+      const sxQThr = qThresholdOrDefault(singlexSnap);
+      const noQText = noQ === null ? "NA" : fmt(noQ, 4) + " <= " + fmt(noQThr, 4);
+      const sxQText = sxQ === null ? "NA" : fmt(sxQ, 4) + " <= " + fmt(sxQThr, 4);
+      appendCompareHint(
+        list,
+        "q-threshold check: nooption(" + noQText + "), singlex(" + sxQText + ").",
+        isQPass(nooptionSnap) || isQPass(singlexSnap) ? "ok" : "warn"
+      );
+
+      const restartDelta = compareNumericMetric(nooptionSnap.restart_mean, singlexSnap.restart_mean, "higher", 3);
+      appendCompareHint(
+        list,
+        "restart mean: nooption=" + fmt(nooptionSnap.restart_mean, 3) +
+          ", singlex=" + fmt(singlexSnap.restart_mean, 3) + " => " + restartDelta.text + ".",
+        restartDelta.cls === "compare-delta-up" ? "ok" : restartDelta.cls === "compare-delta-down" ? "warn" : ""
+      );
+
+      const validatedDelta = compareNumericMetric(nooptionSnap.validated, singlexSnap.validated, "higher", 0);
+      appendCompareHint(
+        list,
+        "validated candidates: nooption=" + fmt(nooptionSnap.validated) +
+          ", singlex=" + fmt(singlexSnap.validated) + " => " + validatedDelta.text + ".",
+        validatedDelta.cls === "compare-delta-same" ? "" : "warn"
+      );
+
+      const noScore = scoreSnapshot(nooptionSnap);
+      const sxScore = scoreSnapshot(singlexSnap);
+      const scoreDiff = sxScore - noScore;
+      if (scoreDiff >= 2) {
+        appendCompareHint(
+          list,
+          "provisional pick: singlex (composite score " + String(sxScore) + " vs " + String(noScore) + ").",
+          "ok"
+        );
+      } else if (scoreDiff <= -2) {
+        appendCompareHint(
+          list,
+          "provisional pick: nooption (composite score " + String(noScore) + " vs " + String(sxScore) + ").",
+          "ok"
+        );
+      } else {
+        appendCompareHint(
+          list,
+          "provisional pick: no clear winner (composite score " + String(noScore) + " vs " + String(sxScore) + ").",
+          "warn"
+        );
+      }
     }
 
     function renderCompareBoard(nooptionSnap, singlexSnap) {
@@ -1123,6 +1290,8 @@ __STATE_OPTIONS__
         poolDelta.text,
         poolDelta.cls
       );
+
+      renderCompareInterpretation(nooptionSnap, singlexSnap);
     }
 
     function applyInferredPairFromSeed(seedRunId) {
