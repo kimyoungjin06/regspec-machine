@@ -335,6 +335,44 @@ def build_ui_page_html(*, run_modes: Iterable[str]) -> str:
       font-size: 11px;
       color: var(--muted);
     }
+    .compare-head {
+      font-family: "Space Grotesk", "IBM Plex Sans", sans-serif;
+      font-size: 12px;
+      color: var(--muted);
+      letter-spacing: 0.2px;
+    }
+    .compare-delta-up {
+      color: var(--ok);
+      font-weight: 600;
+    }
+    .compare-delta-down {
+      color: var(--fail);
+      font-weight: 600;
+    }
+    .compare-delta-same {
+      color: var(--muted);
+      font-weight: 600;
+    }
+    .compare-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: #f8fbff;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--muted);
+    }
+    .compare-badge-pass {
+      border-color: #b7e2c0;
+      background: #f2fcf5;
+      color: var(--ok);
+    }
+    .compare-badge-fail {
+      border-color: #f0bcc4;
+      background: #fff5f7;
+      color: var(--fail);
+    }
     .progress-meta {
       font-size: 11px;
       color: var(--muted);
@@ -498,6 +536,38 @@ __STATE_OPTIONS__
     </section>
 
     <section class="card" style="margin-top: 14px;">
+      <h2>Baseline Compare (nooption vs singlex)</h2>
+      <div class="row">
+        <div>
+          <label for="compare_nooption_run_id">nooption run_id</label>
+          <input id="compare_nooption_run_id" placeholder="phase_b_...__nooption_baseline" />
+        </div>
+        <div>
+          <label for="compare_singlex_run_id">singlex run_id</label>
+          <input id="compare_singlex_run_id" placeholder="phase_b_...__singlex" />
+        </div>
+      </div>
+      <div class="toolbar">
+        <button id="compare_btn">Compare Runs</button>
+        <button id="compare_from_detail_btn" class="ghost">Use detail run as pair key</button>
+      </div>
+      <div id="compare_notice" class="notice">Set two run IDs and run compare.</div>
+      <div class="run-table-wrap compact-table" style="margin-top: 8px;">
+        <table>
+          <thead>
+            <tr>
+              <th class="compare-head">metric</th>
+              <th class="compare-head">nooption</th>
+              <th class="compare-head">singlex</th>
+              <th class="compare-head">delta / winner</th>
+            </tr>
+          </thead>
+          <tbody id="compare_tbody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card" style="margin-top: 14px;">
       <h2>Run Monitor</h2>
       <div class="run-table-wrap">
         <table>
@@ -541,6 +611,7 @@ __STATE_OPTIONS__
       inspectBusy: false,
       runsBusy: false,
       healthBusy: false,
+      compareBusy: false,
     };
 
     const RUN_ID_PATTERN = /^[A-Za-z0-9._:-]{3,128}$/;
@@ -568,6 +639,42 @@ __STATE_OPTIONS__
         return String(n);
       }
       return String(v);
+    }
+
+    function fmtSigned(v, digits) {
+      const n = Number(v);
+      if (!Number.isFinite(n)) return "-";
+      const text = typeof digits === "number" ? n.toFixed(digits) : String(n);
+      if (n > 0) return "+" + text;
+      return text;
+    }
+
+    function numericOrNull(v) {
+      const n = Number(v);
+      return Number.isFinite(n) ? n : null;
+    }
+
+    function boolOrNull(v) {
+      if (v === true) return true;
+      if (v === false) return false;
+      return null;
+    }
+
+    function createCompareBadge(value) {
+      const span = document.createElement("span");
+      span.className = "compare-badge";
+      if (value === true) {
+        span.classList.add("compare-badge-pass");
+        span.textContent = "pass";
+        return span;
+      }
+      if (value === false) {
+        span.classList.add("compare-badge-fail");
+        span.textContent = "fail";
+        return span;
+      }
+      span.textContent = "unknown";
+      return span;
     }
 
     function setNotice(el, kind, message) {
@@ -610,6 +717,14 @@ __STATE_OPTIONS__
       const btn = byId("inspect_btn");
       btn.disabled = UI_STATE.inspectBusy;
       btn.textContent = UI_STATE.inspectBusy ? "Inspecting..." : "Inspect";
+    }
+
+    function setCompareBusy(flag) {
+      UI_STATE.compareBusy = Boolean(flag);
+      const btn = byId("compare_btn");
+      btn.disabled = UI_STATE.compareBusy;
+      btn.textContent = UI_STATE.compareBusy ? "Comparing..." : "Compare Runs";
+      byId("compare_from_detail_btn").disabled = UI_STATE.compareBusy;
     }
 
     function validateRunId(runId) {
@@ -792,6 +907,271 @@ __STATE_OPTIONS__
       );
     }
 
+    function appendCompareRow(tbody, label, nooptionValue, singlexValue, deltaValue, deltaCls) {
+      const tr = document.createElement("tr");
+
+      const th = document.createElement("th");
+      th.textContent = label;
+      tr.appendChild(th);
+
+      const tdNooption = document.createElement("td");
+      if (nooptionValue && typeof nooptionValue === "object" && nooptionValue.nodeType) {
+        tdNooption.appendChild(nooptionValue);
+      } else {
+        tdNooption.textContent = String(
+          nooptionValue === null || nooptionValue === undefined || nooptionValue === "" ? "-" : nooptionValue
+        );
+      }
+      tr.appendChild(tdNooption);
+
+      const tdSinglex = document.createElement("td");
+      if (singlexValue && typeof singlexValue === "object" && singlexValue.nodeType) {
+        tdSinglex.appendChild(singlexValue);
+      } else {
+        tdSinglex.textContent = String(
+          singlexValue === null || singlexValue === undefined || singlexValue === "" ? "-" : singlexValue
+        );
+      }
+      tr.appendChild(tdSinglex);
+
+      const tdDelta = document.createElement("td");
+      tdDelta.textContent = String(
+        deltaValue === null || deltaValue === undefined || deltaValue === "" ? "-" : deltaValue
+      );
+      if (deltaCls) tdDelta.classList.add(deltaCls);
+      tr.appendChild(tdDelta);
+
+      tbody.appendChild(tr);
+    }
+
+    function compareNumericMetric(nooptionValue, singlexValue, preference, digits) {
+      const noN = numericOrNull(nooptionValue);
+      const sxN = numericOrNull(singlexValue);
+      if (noN === null || sxN === null) return { text: "-", cls: "" };
+
+      const diff = sxN - noN;
+      if (Math.abs(diff) < 1e-12) {
+        return { text: "0 (same)", cls: "compare-delta-same" };
+      }
+
+      const singlexBetter = preference === "lower" ? diff < 0 : diff > 0;
+      const winner = singlexBetter ? "singlex better" : "nooption better";
+      return {
+        text: fmtSigned(diff, digits) + " (" + winner + ")",
+        cls: singlexBetter ? "compare-delta-up" : "compare-delta-down",
+      };
+    }
+
+    function compareBooleanMetric(nooptionValue, singlexValue) {
+      const noB = boolOrNull(nooptionValue);
+      const sxB = boolOrNull(singlexValue);
+      if (noB === null || sxB === null) return { text: "-", cls: "" };
+      if (noB === sxB) return { text: "same", cls: "compare-delta-same" };
+      if (!noB && sxB) return { text: "singlex better", cls: "compare-delta-up" };
+      return { text: "nooption better", cls: "compare-delta-down" };
+    }
+
+    function inferPairRunIds(seedRunId) {
+      const rid = validateRunId(seedRunId);
+      const noSuffix = "__nooption_baseline";
+      const sxSuffix = "__singlex";
+      if (rid.endsWith(noSuffix)) {
+        const head = rid.slice(0, -noSuffix.length);
+        return { nooption: rid, singlex: head + sxSuffix };
+      }
+      if (rid.endsWith(sxSuffix)) {
+        const head = rid.slice(0, -sxSuffix.length);
+        return { nooption: head + noSuffix, singlex: rid };
+      }
+      return { nooption: rid + noSuffix, singlex: rid + sxSuffix };
+    }
+
+    async function fetchRunBundle(runId) {
+      const rid = validateRunId(runId);
+      const enc = encodeURIComponent(rid);
+      const [statusResp, summaryResp, reviewResp] = await Promise.all([
+        fetchJson("/runs/" + enc),
+        fetchJson("/runs/" + enc + "/summary"),
+        fetchJson("/runs/" + enc + "/review"),
+      ]);
+      return { runId: rid, statusResp: statusResp, summaryResp: summaryResp, reviewResp: reviewResp };
+    }
+
+    function extractCompareSnapshot(bundle) {
+      const status = bundle.statusResp && bundle.statusResp.status ? bundle.statusResp.status : {};
+      const summary = bundle.summaryResp && bundle.summaryResp.summary ? bundle.summaryResp.summary : {};
+      const review = bundle.reviewResp && bundle.reviewResp.review ? bundle.reviewResp.review : {};
+      const metrics = review.metrics || {};
+      const gov = review.governance || {};
+      return {
+        run_id: status.run_id || summary.run_id || review.run_id || bundle.runId || "",
+        mode: status.mode || summary.mode || review.mode || "",
+        state: status.state || summary.state || review.state || "",
+        validated: numericOrNull(metrics.validated_candidate_count),
+        support: numericOrNull(metrics.support_candidate_count),
+        best_p: numericOrNull(metrics.best_p_validation),
+        best_q: numericOrNull(metrics.best_q_validation),
+        restart_max: numericOrNull(metrics.restart_validated_rate_max),
+        restart_mean: numericOrNull(metrics.restart_validated_rate_mean),
+        consensus: boolOrNull(gov.track_consensus_enforced),
+        leakage_guard: boolOrNull(gov.validation_used_for_search_false),
+        pool_lock: boolOrNull(gov.candidate_pool_locked_pre_validation_true),
+      };
+    }
+
+    function renderCompareBoard(nooptionSnap, singlexSnap) {
+      const tbody = byId("compare_tbody");
+      tbody.replaceChildren();
+
+      appendCompareRow(tbody, "run_id", nooptionSnap.run_id, singlexSnap.run_id, "-", "");
+      appendCompareRow(tbody, "mode", nooptionSnap.mode, singlexSnap.mode, "-", "");
+      appendCompareRow(
+        tbody,
+        "state",
+        createStatusPill(nooptionSnap.state || "unknown"),
+        createStatusPill(singlexSnap.state || "unknown"),
+        "-",
+        ""
+      );
+
+      const validatedDelta = compareNumericMetric(nooptionSnap.validated, singlexSnap.validated, "higher", 0);
+      appendCompareRow(
+        tbody,
+        "validated candidates",
+        fmt(nooptionSnap.validated),
+        fmt(singlexSnap.validated),
+        validatedDelta.text,
+        validatedDelta.cls
+      );
+
+      const supportDelta = compareNumericMetric(nooptionSnap.support, singlexSnap.support, "higher", 0);
+      appendCompareRow(
+        tbody,
+        "support candidates",
+        fmt(nooptionSnap.support),
+        fmt(singlexSnap.support),
+        supportDelta.text,
+        supportDelta.cls
+      );
+
+      const pDelta = compareNumericMetric(nooptionSnap.best_p, singlexSnap.best_p, "lower", 4);
+      appendCompareRow(
+        tbody,
+        "best p (lower better)",
+        fmt(nooptionSnap.best_p, 4),
+        fmt(singlexSnap.best_p, 4),
+        pDelta.text,
+        pDelta.cls
+      );
+
+      const qDelta = compareNumericMetric(nooptionSnap.best_q, singlexSnap.best_q, "lower", 4);
+      appendCompareRow(
+        tbody,
+        "best q (lower better)",
+        fmt(nooptionSnap.best_q, 4),
+        fmt(singlexSnap.best_q, 4),
+        qDelta.text,
+        qDelta.cls
+      );
+
+      const restartMaxDelta = compareNumericMetric(nooptionSnap.restart_max, singlexSnap.restart_max, "higher", 3);
+      appendCompareRow(
+        tbody,
+        "restart max (higher better)",
+        fmt(nooptionSnap.restart_max, 3),
+        fmt(singlexSnap.restart_max, 3),
+        restartMaxDelta.text,
+        restartMaxDelta.cls
+      );
+
+      const restartMeanDelta = compareNumericMetric(nooptionSnap.restart_mean, singlexSnap.restart_mean, "higher", 3);
+      appendCompareRow(
+        tbody,
+        "restart mean (higher better)",
+        fmt(nooptionSnap.restart_mean, 3),
+        fmt(singlexSnap.restart_mean, 3),
+        restartMeanDelta.text,
+        restartMeanDelta.cls
+      );
+
+      const consensusDelta = compareBooleanMetric(nooptionSnap.consensus, singlexSnap.consensus);
+      appendCompareRow(
+        tbody,
+        "consensus (pass/fail)",
+        createCompareBadge(nooptionSnap.consensus),
+        createCompareBadge(singlexSnap.consensus),
+        consensusDelta.text,
+        consensusDelta.cls
+      );
+
+      const leakageDelta = compareBooleanMetric(nooptionSnap.leakage_guard, singlexSnap.leakage_guard);
+      appendCompareRow(
+        tbody,
+        "leakage guard (pass/fail)",
+        createCompareBadge(nooptionSnap.leakage_guard),
+        createCompareBadge(singlexSnap.leakage_guard),
+        leakageDelta.text,
+        leakageDelta.cls
+      );
+
+      const poolDelta = compareBooleanMetric(nooptionSnap.pool_lock, singlexSnap.pool_lock);
+      appendCompareRow(
+        tbody,
+        "pool lock (pass/fail)",
+        createCompareBadge(nooptionSnap.pool_lock),
+        createCompareBadge(singlexSnap.pool_lock),
+        poolDelta.text,
+        poolDelta.cls
+      );
+    }
+
+    function applyInferredPairFromSeed(seedRunId) {
+      const pair = inferPairRunIds(seedRunId);
+      byId("compare_nooption_run_id").value = pair.nooption;
+      byId("compare_singlex_run_id").value = pair.singlex;
+      return pair;
+    }
+
+    async function compareRuns() {
+      if (UI_STATE.compareBusy) return;
+      const notice = byId("compare_notice");
+
+      try {
+        const noRun = validateRunId(byId("compare_nooption_run_id").value);
+        const sxRun = validateRunId(byId("compare_singlex_run_id").value);
+        setCompareBusy(true);
+        setNotice(notice, "", "loading comparison...");
+
+        const [noBundle, sxBundle] = await Promise.all([
+          fetchRunBundle(noRun),
+          fetchRunBundle(sxRun),
+        ]);
+
+        const noSnap = extractCompareSnapshot(noBundle);
+        const sxSnap = extractCompareSnapshot(sxBundle);
+        renderCompareBoard(noSnap, sxSnap);
+        setNotice(notice, "ok", "compared: " + noRun + " vs " + sxRun);
+      } catch (err) {
+        setNotice(notice, "error", String(err && err.message ? err.message : err));
+      } finally {
+        setCompareBusy(false);
+      }
+    }
+
+    function compareFromDetailSeed() {
+      try {
+        const rid = validateRunId(byId("detail_run_id").value);
+        const pair = applyInferredPairFromSeed(rid);
+        setNotice(
+          byId("compare_notice"),
+          "",
+          "pair inferred from detail run: " + pair.nooption + " / " + pair.singlex
+        );
+      } catch (err) {
+        setNotice(byId("compare_notice"), "error", String(err && err.message ? err.message : err));
+      }
+    }
+
     function renderCountsCell(td, counts) {
       const data = counts && typeof counts === "object" ? counts : {};
       const keys = Object.keys(data);
@@ -909,6 +1289,19 @@ __STATE_OPTIONS__
         renderReviewCards(review);
         renderDetailOverview(status, summary, review);
         setNotice(detailNotice, "ok", "loaded: " + rid);
+        if (!String(byId("compare_nooption_run_id").value || "").trim() &&
+            !String(byId("compare_singlex_run_id").value || "").trim()) {
+          try {
+            const pair = applyInferredPairFromSeed(rid);
+            setNotice(
+              byId("compare_notice"),
+              "",
+              "pair inferred from detail run: " + pair.nooption + " / " + pair.singlex
+            );
+          } catch (_err) {
+            // no-op: detail run may not follow pair naming.
+          }
+        }
       } catch (err) {
         setNotice(detailNotice, "error", String(err && err.message ? err.message : err));
       } finally {
@@ -1075,6 +1468,12 @@ __STATE_OPTIONS__
         setNotice(byId("submit_notice"), "error", String(err && err.message ? err.message : err));
       });
     });
+    byId("compare_btn").addEventListener("click", () => {
+      compareRuns().catch((err) => {
+        setNotice(byId("compare_notice"), "error", String(err && err.message ? err.message : err));
+      });
+    });
+    byId("compare_from_detail_btn").addEventListener("click", compareFromDetailSeed);
 
     byId("mode").addEventListener("change", updateModeHelp);
 
