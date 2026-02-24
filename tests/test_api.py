@@ -297,6 +297,9 @@ def test_api_ui_endpoint_serves_html_console() -> None:
     assert "/review" in resp.text
     assert "review_cards" in resp.text
     assert "leakage guard" in resp.text
+    assert "Quick Start" in resp.text
+    assert "detail_overview_tbody" in resp.text
+    assert "preset_pair_btn" in resp.text
 
 
 def test_api_review_endpoint_returns_pending_when_no_result() -> None:
