@@ -71,6 +71,9 @@ L7 parity/governance regression focus:
 python -m pytest -q tests/test_parity_l2_l3_l4.py
 ```
 
+CI:
+- GitHub Actions runs `python -m pytest -q` on push/PR (`.github/workflows/ci.yml`)
+
 ## Quick start (Python API)
 
 ```python
