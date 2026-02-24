@@ -306,6 +306,8 @@ def test_api_ui_endpoint_serves_html_console() -> None:
     assert "compare_tbody" in resp.text
     assert "Direction Review Hints" in resp.text
     assert "compare_interp_list" in resp.text
+    assert "export_compare_md_btn" in resp.text
+    assert "export_compare_json_btn" in resp.text
 
 
 def test_api_review_endpoint_returns_pending_when_no_result() -> None:

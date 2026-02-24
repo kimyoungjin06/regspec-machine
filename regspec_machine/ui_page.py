@@ -586,6 +586,8 @@ __STATE_OPTIONS__
       <div class="toolbar">
         <button id="compare_btn">Compare Runs</button>
         <button id="compare_from_detail_btn" class="ghost">Use detail run as pair key</button>
+        <button id="export_compare_md_btn" class="ghost" disabled>Export compare.md</button>
+        <button id="export_compare_json_btn" class="ghost" disabled>Export compare.json</button>
       </div>
       <div id="compare_notice" class="notice">Set two run IDs and run compare.</div>
       <div class="run-table-wrap compact-table" style="margin-top: 8px;">
@@ -654,6 +656,7 @@ __STATE_OPTIONS__
       runsBusy: false,
       healthBusy: false,
       compareBusy: false,
+      compareSnapshot: null,
     };
 
     const RUN_ID_PATTERN = /^[A-Za-z0-9._:-]{3,128}$/;
@@ -767,6 +770,229 @@ __STATE_OPTIONS__
       btn.disabled = UI_STATE.compareBusy;
       btn.textContent = UI_STATE.compareBusy ? "Comparing..." : "Compare Runs";
       byId("compare_from_detail_btn").disabled = UI_STATE.compareBusy;
+      updateCompareExportButtons();
+    }
+
+    function hasCompareSnapshot() {
+      return Boolean(
+        UI_STATE.compareSnapshot &&
+        UI_STATE.compareSnapshot.nooption &&
+        UI_STATE.compareSnapshot.singlex
+      );
+    }
+
+    function updateCompareExportButtons() {
+      const disabled = UI_STATE.compareBusy || !hasCompareSnapshot();
+      byId("export_compare_md_btn").disabled = disabled;
+      byId("export_compare_json_btn").disabled = disabled;
+    }
+
+    function sanitizeFileNamePart(v) {
+      const text = String(v || "unknown")
+        .trim()
+        .replace(/[^A-Za-z0-9._-]+/g, "_")
+        .replace(/_+/g, "_")
+        .replace(/^_+|_+$/g, "");
+      return text || "unknown";
+    }
+
+    function compareStateValue(value) {
+      const b = boolOrNull(value);
+      if (b === true) return "pass";
+      if (b === false) return "fail";
+      return "unknown";
+    }
+
+    function compareRunRows(nooptionSnap, singlexSnap) {
+      const rows = [];
+
+      rows.push({
+        metric: "run_id",
+        nooption: String(nooptionSnap.run_id || "-"),
+        singlex: String(singlexSnap.run_id || "-"),
+        delta: "-",
+      });
+      rows.push({
+        metric: "mode",
+        nooption: String(nooptionSnap.mode || "-"),
+        singlex: String(singlexSnap.mode || "-"),
+        delta: "-",
+      });
+      rows.push({
+        metric: "state",
+        nooption: String(nooptionSnap.state || "unknown"),
+        singlex: String(singlexSnap.state || "unknown"),
+        delta: "-",
+      });
+
+      const validatedDelta = compareNumericMetric(nooptionSnap.validated, singlexSnap.validated, "higher", 0);
+      rows.push({
+        metric: "validated_candidates",
+        nooption: fmt(nooptionSnap.validated),
+        singlex: fmt(singlexSnap.validated),
+        delta: validatedDelta.text,
+      });
+
+      const supportDelta = compareNumericMetric(nooptionSnap.support, singlexSnap.support, "higher", 0);
+      rows.push({
+        metric: "support_candidates",
+        nooption: fmt(nooptionSnap.support),
+        singlex: fmt(singlexSnap.support),
+        delta: supportDelta.text,
+      });
+
+      const pDelta = compareNumericMetric(nooptionSnap.best_p, singlexSnap.best_p, "lower", 4);
+      rows.push({
+        metric: "best_p_validation",
+        nooption: fmt(nooptionSnap.best_p, 4),
+        singlex: fmt(singlexSnap.best_p, 4),
+        delta: pDelta.text,
+      });
+
+      const qDelta = compareNumericMetric(nooptionSnap.best_q, singlexSnap.best_q, "lower", 4);
+      rows.push({
+        metric: "best_q_validation",
+        nooption: fmt(nooptionSnap.best_q, 4),
+        singlex: fmt(singlexSnap.best_q, 4),
+        delta: qDelta.text,
+      });
+
+      const restartMaxDelta = compareNumericMetric(nooptionSnap.restart_max, singlexSnap.restart_max, "higher", 3);
+      rows.push({
+        metric: "restart_validated_rate_max",
+        nooption: fmt(nooptionSnap.restart_max, 3),
+        singlex: fmt(singlexSnap.restart_max, 3),
+        delta: restartMaxDelta.text,
+      });
+
+      const restartMeanDelta = compareNumericMetric(nooptionSnap.restart_mean, singlexSnap.restart_mean, "higher", 3);
+      rows.push({
+        metric: "restart_validated_rate_mean",
+        nooption: fmt(nooptionSnap.restart_mean, 3),
+        singlex: fmt(singlexSnap.restart_mean, 3),
+        delta: restartMeanDelta.text,
+      });
+
+      const consensusDelta = compareBooleanMetric(nooptionSnap.consensus, singlexSnap.consensus);
+      rows.push({
+        metric: "track_consensus_enforced",
+        nooption: compareStateValue(nooptionSnap.consensus),
+        singlex: compareStateValue(singlexSnap.consensus),
+        delta: consensusDelta.text,
+      });
+
+      const leakageDelta = compareBooleanMetric(nooptionSnap.leakage_guard, singlexSnap.leakage_guard);
+      rows.push({
+        metric: "validation_used_for_search_false",
+        nooption: compareStateValue(nooptionSnap.leakage_guard),
+        singlex: compareStateValue(singlexSnap.leakage_guard),
+        delta: leakageDelta.text,
+      });
+
+      const poolDelta = compareBooleanMetric(nooptionSnap.pool_lock, singlexSnap.pool_lock);
+      rows.push({
+        metric: "candidate_pool_locked_pre_validation_true",
+        nooption: compareStateValue(nooptionSnap.pool_lock),
+        singlex: compareStateValue(singlexSnap.pool_lock),
+        delta: poolDelta.text,
+      });
+
+      return rows;
+    }
+
+    function getCompareSnapshotForExport() {
+      if (!hasCompareSnapshot()) {
+        throw new Error("no comparison snapshot yet; run compare first");
+      }
+      return UI_STATE.compareSnapshot;
+    }
+
+    function buildCompareExportBaseName(snapshot) {
+      const noId = sanitizeFileNamePart(snapshot.nooption && snapshot.nooption.run_id);
+      const sxId = sanitizeFileNamePart(snapshot.singlex && snapshot.singlex.run_id);
+      return "compare_" + noId + "__vs__" + sxId;
+    }
+
+    function downloadTextFile(filename, content, mimeType) {
+      const blob = new Blob([String(content)], { type: String(mimeType || "text/plain") + ";charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+    }
+
+    function markdownCell(text) {
+      return String(text === null || text === undefined ? "-" : text).replace(/\\|/g, "\\|");
+    }
+
+    function buildCompareExportPayload(snapshot) {
+      const rows = compareRunRows(snapshot.nooption, snapshot.singlex);
+      return {
+        exported_at_utc: new Date().toISOString(),
+        compared_at_utc: snapshot.compared_at_utc || null,
+        nooption: snapshot.nooption,
+        singlex: snapshot.singlex,
+        hints: Array.isArray(snapshot.hints) ? snapshot.hints : [],
+        rows: rows,
+      };
+    }
+
+    function renderCompareMarkdown(payload) {
+      const lines = [];
+      lines.push("# Baseline Compare Summary");
+      lines.push("");
+      lines.push("- compared_at_utc: " + String(payload.compared_at_utc || "-"));
+      lines.push("- exported_at_utc: " + String(payload.exported_at_utc || "-"));
+      lines.push("- nooption_run_id: " + String(payload.nooption && payload.nooption.run_id || "-"));
+      lines.push("- singlex_run_id: " + String(payload.singlex && payload.singlex.run_id || "-"));
+      lines.push("");
+      lines.push("## Metrics");
+      lines.push("");
+      lines.push("| metric | nooption | singlex | delta |");
+      lines.push("| --- | --- | --- | --- |");
+      for (const row of payload.rows || []) {
+        lines.push(
+          "| " + markdownCell(row.metric) +
+          " | " + markdownCell(row.nooption) +
+          " | " + markdownCell(row.singlex) +
+          " | " + markdownCell(row.delta) + " |"
+        );
+      }
+      lines.push("");
+      lines.push("## Direction Review Hints");
+      lines.push("");
+      const hints = Array.isArray(payload.hints) ? payload.hints : [];
+      if (!hints.length) {
+        lines.push("- (none)");
+      } else {
+        for (const hint of hints) {
+          const level = String(hint && hint.level ? hint.level : "info").toUpperCase();
+          const text = String(hint && hint.text ? hint.text : "-");
+          lines.push("- [" + level + "] " + text);
+        }
+      }
+      lines.push("");
+      return lines.join("\n");
+    }
+
+    function exportCompareJson() {
+      const snapshot = getCompareSnapshotForExport();
+      const payload = buildCompareExportPayload(snapshot);
+      const file = buildCompareExportBaseName(snapshot) + ".json";
+      downloadTextFile(file, JSON.stringify(payload, null, 2), "application/json");
+      setNotice(byId("compare_notice"), "ok", "exported: " + file);
+    }
+
+    function exportCompareMarkdown() {
+      const snapshot = getCompareSnapshotForExport();
+      const payload = buildCompareExportPayload(snapshot);
+      const file = buildCompareExportBaseName(snapshot) + ".md";
+      downloadTextFile(file, renderCompareMarkdown(payload), "text/markdown");
+      setNotice(byId("compare_notice"), "ok", "exported: " + file);
     }
 
     function validateRunId(runId) {
@@ -1111,12 +1337,16 @@ __STATE_OPTIONS__
     function renderCompareInterpretation(nooptionSnap, singlexSnap) {
       const list = byId("compare_interp_list");
       list.replaceChildren();
+      const hints = [];
+      function addHint(text, level) {
+        appendCompareHint(list, text, level);
+        hints.push({ text: String(text), level: String(level || "info") });
+      }
 
       const noState = String(nooptionSnap.state || "").toLowerCase();
       const sxState = String(singlexSnap.state || "").toLowerCase();
       if (noState !== "succeeded" || sxState !== "succeeded") {
-        appendCompareHint(
-          list,
+        addHint(
           "One or both runs are not succeeded yet. Treat this board as interim only.",
           "warn"
         );
@@ -1125,13 +1355,13 @@ __STATE_OPTIONS__
       const noGov = isGovernancePass(nooptionSnap);
       const sxGov = isGovernancePass(singlexSnap);
       if (noGov && sxGov) {
-        appendCompareHint(list, "Governance gates pass on both runs.", "ok");
+        addHint("Governance gates pass on both runs.", "ok");
       } else if (sxGov && !noGov) {
-        appendCompareHint(list, "Governance gates favor singlex (nooption has at least one fail).", "warn");
+        addHint("Governance gates favor singlex (nooption has at least one fail).", "warn");
       } else if (!sxGov && noGov) {
-        appendCompareHint(list, "Governance gates favor nooption (singlex has at least one fail).", "warn");
+        addHint("Governance gates favor nooption (singlex has at least one fail).", "warn");
       } else {
-        appendCompareHint(list, "Governance gates fail on both runs. Do not promote either result yet.", "fail");
+        addHint("Governance gates fail on both runs. Do not promote either result yet.", "fail");
       }
 
       const noQ = numericOrNull(nooptionSnap.best_q);
@@ -1140,23 +1370,20 @@ __STATE_OPTIONS__
       const sxQThr = qThresholdOrDefault(singlexSnap);
       const noQText = noQ === null ? "NA" : fmt(noQ, 4) + " <= " + fmt(noQThr, 4);
       const sxQText = sxQ === null ? "NA" : fmt(sxQ, 4) + " <= " + fmt(sxQThr, 4);
-      appendCompareHint(
-        list,
+      addHint(
         "q-threshold check: nooption(" + noQText + "), singlex(" + sxQText + ").",
         isQPass(nooptionSnap) || isQPass(singlexSnap) ? "ok" : "warn"
       );
 
       const restartDelta = compareNumericMetric(nooptionSnap.restart_mean, singlexSnap.restart_mean, "higher", 3);
-      appendCompareHint(
-        list,
+      addHint(
         "restart mean: nooption=" + fmt(nooptionSnap.restart_mean, 3) +
           ", singlex=" + fmt(singlexSnap.restart_mean, 3) + " => " + restartDelta.text + ".",
         restartDelta.cls === "compare-delta-up" ? "ok" : restartDelta.cls === "compare-delta-down" ? "warn" : ""
       );
 
       const validatedDelta = compareNumericMetric(nooptionSnap.validated, singlexSnap.validated, "higher", 0);
-      appendCompareHint(
-        list,
+      addHint(
         "validated candidates: nooption=" + fmt(nooptionSnap.validated) +
           ", singlex=" + fmt(singlexSnap.validated) + " => " + validatedDelta.text + ".",
         validatedDelta.cls === "compare-delta-same" ? "" : "warn"
@@ -1166,24 +1393,22 @@ __STATE_OPTIONS__
       const sxScore = scoreSnapshot(singlexSnap);
       const scoreDiff = sxScore - noScore;
       if (scoreDiff >= 2) {
-        appendCompareHint(
-          list,
+        addHint(
           "provisional pick: singlex (composite score " + String(sxScore) + " vs " + String(noScore) + ").",
           "ok"
         );
       } else if (scoreDiff <= -2) {
-        appendCompareHint(
-          list,
+        addHint(
           "provisional pick: nooption (composite score " + String(noScore) + " vs " + String(sxScore) + ").",
           "ok"
         );
       } else {
-        appendCompareHint(
-          list,
+        addHint(
           "provisional pick: no clear winner (composite score " + String(noScore) + " vs " + String(sxScore) + ").",
           "warn"
         );
       }
+      return hints;
     }
 
     function renderCompareBoard(nooptionSnap, singlexSnap) {
@@ -1291,7 +1516,14 @@ __STATE_OPTIONS__
         poolDelta.cls
       );
 
-      renderCompareInterpretation(nooptionSnap, singlexSnap);
+      const hints = renderCompareInterpretation(nooptionSnap, singlexSnap);
+      UI_STATE.compareSnapshot = {
+        compared_at_utc: new Date().toISOString(),
+        nooption: nooptionSnap,
+        singlex: singlexSnap,
+        hints: hints,
+      };
+      updateCompareExportButtons();
     }
 
     function applyInferredPairFromSeed(seedRunId) {
@@ -1309,7 +1541,9 @@ __STATE_OPTIONS__
         const noRun = validateRunId(byId("compare_nooption_run_id").value);
         const sxRun = validateRunId(byId("compare_singlex_run_id").value);
         setCompareBusy(true);
+        UI_STATE.compareSnapshot = null;
         setNotice(notice, "", "loading comparison...");
+        updateCompareExportButtons();
 
         const [noBundle, sxBundle] = await Promise.all([
           fetchRunBundle(noRun),
@@ -1321,6 +1555,8 @@ __STATE_OPTIONS__
         renderCompareBoard(noSnap, sxSnap);
         setNotice(notice, "ok", "compared: " + noRun + " vs " + sxRun);
       } catch (err) {
+        UI_STATE.compareSnapshot = null;
+        updateCompareExportButtons();
         setNotice(notice, "error", String(err && err.message ? err.message : err));
       } finally {
         setCompareBusy(false);
@@ -1643,6 +1879,20 @@ __STATE_OPTIONS__
       });
     });
     byId("compare_from_detail_btn").addEventListener("click", compareFromDetailSeed);
+    byId("export_compare_md_btn").addEventListener("click", () => {
+      try {
+        exportCompareMarkdown();
+      } catch (err) {
+        setNotice(byId("compare_notice"), "error", String(err && err.message ? err.message : err));
+      }
+    });
+    byId("export_compare_json_btn").addEventListener("click", () => {
+      try {
+        exportCompareJson();
+      } catch (err) {
+        setNotice(byId("compare_notice"), "error", String(err && err.message ? err.message : err));
+      }
+    });
 
     byId("mode").addEventListener("change", updateModeHelp);
 
@@ -1670,6 +1920,7 @@ __STATE_OPTIONS__
 
     byId("run_id").value = makeDefaultRunId(defaultMode || "ui_run");
     updateModeHelp();
+    updateCompareExportButtons();
 
     refreshHealth();
     refreshRuns();
