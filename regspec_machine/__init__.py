@@ -19,6 +19,7 @@ from .contracts import (
     RunResultContract,
     RunStatusContract,
 )
+from .api import create_app
 from .engine import CommandResult, EngineExecution, PresetEngine
 from .feature_registry import build_feature_registry, load_feature_registry
 from .orchestrator import ExecutionEngine, RunOrchestrator, RunSnapshot
@@ -30,6 +31,7 @@ __all__ = [
     "CommandResult",
     "EngineExecution",
     "NONCONFIRMATORY_MAX_TIERS",
+    "create_app",
     "PresetEngine",
     "ExecutionEngine",
     "REQUIRED_COLUMNS",

@@ -21,6 +21,7 @@
 - `RunRequestContract` / `RunStatusContract` / `RunResultContract`: L1 execution contracts for CLI/API/UI parity (`contracts.py`, `docs/CONTRACTS.md`)
 - `PresetEngine`: L2 execution facade over preset CLI for `nooption/singlex/paired` with contract I/O (`engine.py`)
 - `RunOrchestrator`: L3 lifecycle manager (`queued -> running -> succeeded/failed/cancelled`) over L2 (`orchestrator.py`)
+- `create_app()`: L4 FastAPI service layer exposing submit/status/result/cancel/artifacts endpoints (`api.py`)
 
 ## Non-goals
 

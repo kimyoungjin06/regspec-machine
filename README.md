@@ -52,6 +52,12 @@ Execution contracts for upcoming API/UI work:
 python -m pip install -e .
 ```
 
+Install API extras (FastAPI/uvicorn):
+
+```bash
+python -m pip install -e .[api]
+```
+
 ## Test (dev)
 
 ```bash
@@ -134,6 +140,29 @@ status = orch.submit({"mode": "paired_nooption_singlex", "run_id": "phase_b_pair
 execution = orch.execute(status.run_id)
 print(execution.status.state)
 ```
+
+## Service API (L4 FastAPI)
+
+```python
+from regspec_machine import create_app
+
+app = create_app(workspace_root="/path/to/TwinPaper")
+```
+
+Run server:
+
+```bash
+python -m uvicorn regspec_machine.api:create_app --factory --host 127.0.0.1 --port 8000
+```
+
+Main endpoints:
+- `POST /runs` (submit; query params: `execute=true|false`, `dry_run=true|false`)
+- `GET /runs/{run_id}` (status)
+- `GET /runs/{run_id}/result` (result)
+- `GET /runs/{run_id}/summary` (compact result view)
+- `POST /runs/{run_id}/cancel` (cancel queued/running)
+- `POST /runs/{run_id}/retry` (retry failed/cancelled)
+- `GET /runs/{run_id}/artifacts` (artifact manifest + existence checks)
 
 `load_and_prepare_data()` maps outcomes as:
 - `y_all` from `reference_dik`

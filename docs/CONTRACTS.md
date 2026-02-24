@@ -103,3 +103,17 @@ Result fields:
   - `cancel()` for queued/running runs
 - Orchestrator stores per-run snapshots (`request/status/result/command/stdout_tail/stderr_tail`)
 - Optional `events_jsonl` appends lifecycle events for audit/resume tooling.
+
+## 8) L4 API endpoints
+
+Reference implementation:
+- `regspec_machine/api.py` (`create_app`)
+
+Endpoints:
+- `POST /runs`: submit run request contract (supports idempotency key and optional async dispatch)
+- `GET /runs/{run_id}`: current status contract
+- `GET /runs/{run_id}/result`: result contract (202 while pending)
+- `GET /runs/{run_id}/summary`: compact result summary (202 while pending)
+- `POST /runs/{run_id}/cancel`: transition queued/running run to cancelled
+- `POST /runs/{run_id}/retry`: retry failed/cancelled run (attempt bounded)
+- `GET /runs/{run_id}/artifacts`: artifact manifest + resolved path existence checks
