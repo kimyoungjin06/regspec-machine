@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 import time
 from typing import List
 
@@ -64,6 +65,78 @@ class _FakeEngine:
             result=result,
             stdout="fake_stdout",
             stderr="" if rc == 0 else "fake_stderr",
+        )
+
+
+@dataclass
+class _ReviewEngine:
+    workspace_root: Path
+
+    def execute(self, request: RunRequestContract, *, dry_run: bool = False) -> EngineExecution:
+        top_rel = f"outputs/tables/{request.run_id}_top_inference.csv"
+        rst_rel = f"data/metadata/{request.run_id}_restart.csv"
+        top_path = self.workspace_root / top_rel
+        rst_path = self.workspace_root / rst_rel
+        top_path.parent.mkdir(parents=True, exist_ok=True)
+        rst_path.parent.mkdir(parents=True, exist_ok=True)
+        top_path.write_text(
+            "\n".join(
+                [
+                    "candidate_id,candidate_tier,p_boot_validation,q_value_validation,status_validation,track",
+                    "c1,validated_candidate,0.03,0.08,ok,primary_strict",
+                    "c2,support_candidate,0.09,0.18,ok,sensitivity_broad_company_no_edu",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        rst_path.write_text(
+            "\n".join(
+                [
+                    "candidate_id,validated_rate,support_or_better_rate",
+                    "c1,0.8,1.0",
+                    "c2,0.2,0.9",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        status = RunStatusContract.create(
+            run_id=request.run_id,
+            mode=request.mode,
+            state="succeeded",
+            progress_stage="completed",
+            progress_message="review done",
+            progress_fraction=1.0,
+        )
+        result = RunResultContract.create(
+            run_id=request.run_id,
+            mode=request.mode,
+            state="succeeded",
+            artifacts=RunArtifactsContract(
+                top_models_inference_csv=top_rel,
+                restart_stability_csv=rst_rel,
+            ),
+            counts={"top_rows_inference": 2},
+            governance_checks={
+                "search_governance": {
+                    "validation_used_for_search": False,
+                    "candidate_pool_locked_pre_validation": True,
+                },
+                "track_consensus_meta": {
+                    "enforce_track_consensus": True,
+                    "n_rows_demoted_from_validated": 1,
+                },
+            },
+        )
+        return EngineExecution(
+            request=request,
+            command=("fake", request.mode),
+            returncode=0,
+            status=status,
+            result=result,
+            stdout="ok",
+            stderr="",
         )
 
 
@@ -221,3 +294,50 @@ def test_api_ui_endpoint_serves_html_console() -> None:
     assert resp.status_code == 200
     assert "RegSpec-Machine Console" in resp.text
     assert "/runs" in resp.text
+    assert "/review" in resp.text
+
+
+def test_api_review_endpoint_returns_pending_when_no_result() -> None:
+    orch = RunOrchestrator(engine=_FakeEngine(states=[]))
+    app = create_app(orchestrator=orch)
+    client = TestClient(app)
+
+    create = client.post(
+        "/runs?execute=false",
+        json={"mode": "singlex_baseline", "run_id": "ut_api_review_pending"},
+    )
+    assert create.status_code == 202
+
+    review = client.get("/runs/ut_api_review_pending/review")
+    assert review.status_code == 202
+    assert review.json()["review"] is None
+
+
+def test_api_review_endpoint_extracts_core_metrics(tmp_path: Path) -> None:
+    orch = RunOrchestrator(engine=_ReviewEngine(workspace_root=tmp_path))
+    app = create_app(orchestrator=orch)
+    client = TestClient(app)
+
+    create = client.post(
+        "/runs?execute=false",
+        json={"mode": "singlex_baseline", "run_id": "ut_api_review"},
+    )
+    assert create.status_code == 202
+    orch.execute("ut_api_review")
+
+    review = client.get("/runs/ut_api_review/review")
+    assert review.status_code == 200
+    payload = review.json()["review"]
+    metrics = payload["metrics"]
+    governance = payload["governance"]
+
+    assert metrics["validated_candidate_count"] == 1
+    assert metrics["support_candidate_count"] == 1
+    assert metrics["best_p_validation"] == 0.03
+    assert metrics["best_q_validation"] == 0.08
+    assert metrics["restart_validated_rate_max"] == 0.8
+    assert metrics["restart_validated_rate_mean"] == 0.5
+    assert governance["validation_used_for_search_false"] is True
+    assert governance["candidate_pool_locked_pre_validation_true"] is True
+    assert governance["track_consensus_enforced"] is True
+    assert governance["track_consensus_demoted_rows"] == 1

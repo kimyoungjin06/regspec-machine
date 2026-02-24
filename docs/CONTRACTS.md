@@ -115,6 +115,7 @@ Endpoints:
 - `GET /runs/{run_id}`: current status contract
 - `GET /runs/{run_id}/result`: result contract (202 while pending)
 - `GET /runs/{run_id}/summary`: compact result summary (202 while pending)
+- `GET /runs/{run_id}/review`: core review metrics (`validated/p/q/restart/consensus`) from result + artifacts
 - `POST /runs/{run_id}/cancel`: transition queued/running run to cancelled
 - `POST /runs/{run_id}/retry`: retry failed/cancelled run (attempt bounded)
 - `GET /runs/{run_id}/artifacts`: artifact manifest + resolved path existence checks

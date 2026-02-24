@@ -22,6 +22,7 @@
 - `PresetEngine`: L2 execution facade over preset CLI for `nooption/singlex/paired` with contract I/O (`engine.py`)
 - `RunOrchestrator`: L3 lifecycle manager (`queued -> running -> succeeded/failed/cancelled`) over L2 (`orchestrator.py`)
 - `create_app()`: L4 FastAPI service layer exposing submit/status/result/cancel/artifacts endpoints (`api.py`)
+- L5 review view path is backed by `/runs/{id}/review` (`validated/p/q/restart/consensus` extraction from artifacts)
 - `build_ui_page_html()`: L5 operator UI page rendered at `/ui` for run submit/monitor/review (`ui_page.py`)
 - `regspec-console`: L6.1 local launcher entrypoint for cross-OS operator startup (`launcher.py`)
 - `regspec-desktop`: L6.2 desktop wrapper PoC (`desktop.py`, pywebview-first with browser fallback)

@@ -299,6 +299,8 @@ __STATE_OPTIONS__
         <div id="status_box" class="mono">{}</div>
         <label>summary</label>
         <div id="summary_box" class="mono">{}</div>
+        <label>review (validated / p / q / restart / consensus)</label>
+        <div id="review_box" class="mono">{}</div>
       </div>
     </section>
 
@@ -411,6 +413,8 @@ __STATE_OPTIONS__
       byId("status_box").textContent = prettyJson(status);
       const summary = await fetchJson("/runs/" + encodeURIComponent(rid) + "/summary");
       byId("summary_box").textContent = prettyJson(summary);
+      const review = await fetchJson("/runs/" + encodeURIComponent(rid) + "/review");
+      byId("review_box").textContent = prettyJson(review);
     }
 
     async function refreshRuns() {
@@ -499,4 +503,3 @@ __STATE_OPTIONS__
         .replace("__MODE_OPTIONS__", mode_options)
         .replace("__STATE_OPTIONS__", state_options)
     )
-
