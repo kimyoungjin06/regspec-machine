@@ -1,0 +1,55 @@
+module_id: 03_regspec_machine
+module_name: regspec_machine
+status: active
+objective: "무옵션 + singlex 동시 개선을 위한 governed spec-search 엔진 운영"
+
+source_of_truth:
+  docs:
+    - AGENTS.md
+    - docs/design/RegSpecMachine_UI_Agent_Architecture_WBS.md
+    - docs/design/Module03_RegSpecMachine_DocumentCurationPlan_2026-02-24.md
+    - modules/03_regspec_machine/README.md
+    - modules/03_regspec_machine/docs/README.md
+    - modules/03_regspec_machine/docs/ARCHITECTURE.md
+    - modules/03_regspec_machine/docs/CONTRACTS.md
+    - modules/03_regspec_machine/docs/BASELINE_LOCK_2026-02-24.md
+
+inputs:
+  required:
+    - data/interim/phase_b_policy_cited_twinpapers_expanded_universe_*.csv
+  optional:
+    - data/interim/phase_b_policy_cited_twinpapers_initial_strict_20260219.csv
+    - data/interim/phase_b_policy_cited_twinpapers_initial_broad_20260219.csv
+
+outputs:
+  primary_patterns:
+    - outputs/tables/phase_b_bikard_machine_scientist_*
+    - data/metadata/phase_b_bikard_machine_scientist_*
+    - outputs/reports/phase_b_bikard_machine_scientist_dashboard_*.html
+  operation_logs:
+    - docs/operations/RunLog.md
+
+entrypoints:
+  shell:
+    - modules/03_regspec_machine/scripts/run_module_03.sh
+    - modules/03_regspec_machine/scripts/smoke_module_03_migration_paths.sh
+    - modules/03_regspec_machine/scripts/check_module_03_contract_ci.py
+    - modules/03_regspec_machine/scripts/create_module_03_dataset_dump.sh
+  canonical_scripts:
+    - modules/03_regspec_machine/scripts/modeling/run_phase_b_bikard_machine_scientist_scan.py
+    - modules/03_regspec_machine/scripts/modeling/run_phase_b_regspec_preset.py
+    - modules/03_regspec_machine/scripts/reporting/build_phase_b_regspec_dashboard.py
+    - modules/03_regspec_machine/scripts/check_module_03_contract_ci.py
+    - modules/03_regspec_machine/scripts/smoke_module_03_migration_paths.sh
+    - modules/03_regspec_machine/scripts/create_module_03_dataset_dump.sh
+
+runtime:
+  python: .venv/bin/python
+  package_root: modules/03_regspec_machine
+  execution_policy: "plan-by-default; execute with --exec"
+
+dependency_policy:
+  hard_docs: []
+  soft_docs:
+    - AGENTS.md
+    - docs/design/RegSpecMachine_UI_Agent_Architecture_WBS.md

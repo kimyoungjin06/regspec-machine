@@ -1,0 +1,605 @@
+from __future__ import annotations
+
+from pathlib import Path
+import re
+from typing import Any, Dict, Iterable, List, Optional
+
+import pandas as pd
+from pandas import CategoricalDtype
+
+_TECHNICAL_NAME_TOKENS = (
+    "run_id",
+    "candidate_id",
+    "bootstrap_seed",
+    "seed",
+    "hash",
+    "signature",
+    "timestamp",
+    "created_at",
+    "updated_at",
+    "returncode",
+    "stdout",
+    "stderr",
+    "command",
+    "artifact",
+    "cli_summary",
+)
+
+_LEAKAGE_NAME_TOKENS = (
+    "p_boot",
+    "p_value",
+    "q_value",
+    "candidate_tier",
+    "status_validation",
+    "validated",
+    "support_candidate",
+    "top_model",
+    "model_score",
+    "validation_score",
+    "scan_score",
+    "candidate_rank",
+    "effect_size",
+    "coef",
+    "stderr",
+    "loglik",
+    "aic",
+    "bic",
+)
+
+_OUTCOME_NAME_TOKENS = (
+    "policy_cited",
+    "policy_cite_count",
+    "policy_citation",
+    "policy_impact",
+    "outcome",
+    "target",
+    "label",
+    "dependent",
+    "response",
+    "time_to_first",
+    "time_to_",
+    "citation_",
+    "cited_",
+)
+
+_POST_TREATMENT_HINT_TOKENS = (
+    "post_",
+    "_post",
+    "after_",
+    "_after",
+    "future",
+    "lead",
+    "delta",
+    "change",
+    "growth",
+    "next_",
+)
+
+
+def _norm_name(col_name: str) -> str:
+    return str(col_name).strip().lower()
+
+
+def _contains_any_token(text: str, tokens: Iterable[str]) -> bool:
+    for token in tokens:
+        if token in text:
+            return True
+    return False
+
+
+def _safe_float(value: Any) -> Optional[float]:
+    try:
+        out = float(value)
+    except Exception:
+        return None
+    if out != out:
+        return None
+    return out
+
+
+def _is_id_like(*, col_name: str, unique_share: float) -> bool:
+    text = _norm_name(col_name)
+    if not text:
+        return False
+    if unique_share >= 0.98 and any(token in text for token in ("id", "uuid", "doi", "key")):
+        return True
+    if text.endswith("_id") or text.startswith("id_"):
+        return True
+    return False
+
+
+def _is_technical_column(col_name: str) -> bool:
+    text = _norm_name(col_name)
+    if not text:
+        return False
+    if text.endswith("_path"):
+        return True
+    return _contains_any_token(text, _TECHNICAL_NAME_TOKENS)
+
+
+def _is_outcome_like_column(col_name: str) -> bool:
+    text = _norm_name(col_name)
+    if not text:
+        return False
+    return _contains_any_token(text, _OUTCOME_NAME_TOKENS)
+
+
+def _is_leakage_like_column(col_name: str) -> bool:
+    text = _norm_name(col_name)
+    if not text:
+        return False
+    return _contains_any_token(text, _LEAKAGE_NAME_TOKENS)
+
+
+def _is_post_treatment_hint_column(col_name: str) -> bool:
+    text = _norm_name(col_name)
+    if not text:
+        return False
+    return _contains_any_token(text, _POST_TREATMENT_HINT_TOKENS)
+
+
+def _dtype_group(series: pd.Series) -> str:
+    if pd.api.types.is_bool_dtype(series):
+        return "bool"
+    if pd.api.types.is_numeric_dtype(series):
+        return "numeric"
+    nonmissing = int(series.notna().sum())
+    if nonmissing > 0 and pd.api.types.is_object_dtype(series):
+        sample_texts = [str(v).strip() for v in series.dropna().astype(str).head(50).tolist()]
+        looks_datetime = any(
+            bool(re.search(r"\d{4}[-/]\d{1,2}[-/]\d{1,2}", text))
+            or ("T" in text and ":" in text)
+            for text in sample_texts
+        )
+        if looks_datetime:
+            parsed = pd.to_datetime(series, errors="coerce", utc=True)
+            if int(parsed.notna().sum()) / float(nonmissing) >= 0.95:
+                return "datetime_like"
+    if isinstance(series.dtype, CategoricalDtype):
+        return "categorical"
+    return "string"
+
+
+def _build_column_profile(
+    *,
+    name: str,
+    series: pd.Series,
+    n_rows: int,
+) -> Dict[str, Any]:
+    nonmissing_count = int(series.notna().sum())
+    nonmissing_share = (nonmissing_count / float(n_rows)) if n_rows > 0 else 0.0
+    missing_share = 1.0 - nonmissing_share
+    unique_count = int(series.dropna().nunique())
+    unique_share = (unique_count / float(nonmissing_count)) if nonmissing_count > 0 else 0.0
+    group = _dtype_group(series)
+    samples = [str(v) for v in series.dropna().astype(str).head(3).tolist()]
+
+    out: Dict[str, Any] = {
+        "name": str(name),
+        "dtype": str(series.dtype),
+        "dtype_group": group,
+        "nonmissing_count": int(nonmissing_count),
+        "nonmissing_share": float(nonmissing_share),
+        "missing_share": float(missing_share),
+        "unique_count": int(unique_count),
+        "unique_share": float(unique_share),
+        "sample_values": samples,
+    }
+
+    if group in {"numeric", "bool"}:
+        numeric = pd.to_numeric(series, errors="coerce")
+        valid = numeric.dropna()
+        if not valid.empty:
+            vmin = _safe_float(valid.min())
+            vmax = _safe_float(valid.max())
+            vmean = _safe_float(valid.mean())
+            vstd = _safe_float(valid.std(ddof=0))
+            zero_share = _safe_float((valid == 0).mean())
+            is_binary_numeric = bool(valid.isin([0, 1]).all() and valid.nunique() <= 2)
+            is_nonnegative_integer = bool((valid >= 0).all() and ((valid.round() - valid).abs() < 1e-12).all())
+
+            out.update(
+                {
+                    "min": vmin,
+                    "max": vmax,
+                    "mean": vmean,
+                    "std": vstd,
+                    "zero_share": zero_share,
+                    "is_binary_numeric": is_binary_numeric,
+                    "is_nonnegative_integer": is_nonnegative_integer,
+                }
+            )
+            if is_binary_numeric:
+                out["positive_share"] = _safe_float(valid.mean())
+    return out
+
+
+def _to_y_candidate(col: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    col_name = str(col.get("name", "")).strip()
+    if not col_name:
+        return None
+    if _is_technical_column(col_name):
+        return None
+    nonmissing_share = float(col.get("nonmissing_share") or 0.0)
+    if nonmissing_share < 0.60:
+        return None
+    unique_share = float(col.get("unique_share") or 0.0)
+    if _is_id_like(col_name=col_name, unique_share=unique_share):
+        return None
+
+    dtype_group = str(col.get("dtype_group", ""))
+    unique_count = int(col.get("unique_count") or 0)
+    if dtype_group in {"numeric", "bool"} and bool(col.get("is_binary_numeric")):
+        return {
+            "name": col_name,
+            "y_type": "binary",
+            "nonmissing_share": nonmissing_share,
+            "unique_count": unique_count,
+            "priority": 3.0 + nonmissing_share,
+        }
+    if dtype_group in {"numeric", "bool"} and bool(col.get("is_nonnegative_integer")) and unique_count >= 4:
+        return {
+            "name": col_name,
+            "y_type": "count",
+            "nonmissing_share": nonmissing_share,
+            "unique_count": unique_count,
+            "priority": 2.0 + nonmissing_share,
+        }
+    if dtype_group in {"numeric", "bool"}:
+        std = _safe_float(col.get("std"))
+        if std is not None and std > 0:
+            return {
+                "name": col_name,
+                "y_type": "continuous",
+                "nonmissing_share": nonmissing_share,
+                "unique_count": unique_count,
+                "priority": 1.0 + nonmissing_share,
+            }
+    return None
+
+
+def _select_y_candidates(columns: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+    for col in columns:
+        y_row = _to_y_candidate(col)
+        if y_row is not None:
+            rows.append(y_row)
+    rows_sorted = sorted(rows, key=lambda r: (float(r["priority"]), int(r["unique_count"])), reverse=True)
+    return rows_sorted[:12]
+
+
+def _select_x_candidates(
+    columns: List[Dict[str, Any]],
+    *,
+    n_rows: int,
+    research_mode: bool,
+    y_names: Optional[set[str]] = None,
+    exclude_x_names: Optional[set[str]] = None,
+) -> List[Dict[str, Any]]:
+    y_name_set = {n.strip().lower() for n in (y_names or set()) if str(n).strip()}
+    exclude_name_set = {n.strip().lower() for n in (exclude_x_names or set()) if str(n).strip()}
+    rows: List[Dict[str, Any]] = []
+    for col in columns:
+        name = str(col.get("name", ""))
+        norm_name = _norm_name(name)
+        if _is_technical_column(name):
+            continue
+        if norm_name in y_name_set:
+            continue
+        if norm_name in exclude_name_set:
+            continue
+        if research_mode and (_is_outcome_like_column(name) or _is_leakage_like_column(name)):
+            continue
+        nonmissing_share = float(col.get("nonmissing_share") or 0.0)
+        if nonmissing_share < 0.60:
+            continue
+        unique_count = int(col.get("unique_count") or 0)
+        unique_share = float(col.get("unique_share") or 0.0)
+        if _is_id_like(col_name=name, unique_share=unique_share):
+            continue
+
+        dtype_group = str(col.get("dtype_group", ""))
+        if dtype_group in {"numeric", "bool"}:
+            std = _safe_float(col.get("std"))
+            if std is None or std <= 0:
+                continue
+            rows.append(
+                {
+                    "name": name,
+                    "x_type": "numeric",
+                    "nonmissing_share": nonmissing_share,
+                    "unique_count": unique_count,
+                    "priority": 2.0 + nonmissing_share,
+                }
+            )
+            continue
+
+        if dtype_group == "datetime_like":
+            rows.append(
+                {
+                    "name": name,
+                    "x_type": "time",
+                    "nonmissing_share": nonmissing_share,
+                    "unique_count": unique_count,
+                    "priority": 1.7 + nonmissing_share,
+                }
+            )
+            continue
+
+        max_unique = max(10, int(min(40, n_rows * 0.20)))
+        if 2 <= unique_count <= max_unique:
+            rows.append(
+                {
+                    "name": name,
+                    "x_type": "categorical",
+                    "nonmissing_share": nonmissing_share,
+                    "unique_count": unique_count,
+                    "priority": 1.4 + nonmissing_share,
+                }
+            )
+
+    rows_sorted = sorted(
+        rows,
+        key=lambda r: (float(r["priority"]), -int(r["unique_count"])),
+        reverse=True,
+    )
+    return rows_sorted[:40]
+
+
+def _numeric_series(series: pd.Series) -> pd.Series:
+    return pd.to_numeric(series, errors="coerce")
+
+
+def _to_time_numeric(series: pd.Series) -> pd.Series:
+    ts = pd.to_datetime(series, errors="coerce", utc=True)
+    # nanosecond epoch; keep float for correlation usage.
+    return pd.Series(ts.view("int64"), index=series.index, dtype="float64").where(ts.notna(), other=float("nan"))
+
+
+def _assess_seed_risk(*, y_col: str, x_col: str, x_type: str, y_type: str) -> Dict[str, Any]:
+    y_name = _norm_name(y_col)
+    x_name = _norm_name(x_col)
+    flags: List[str] = []
+    if _is_outcome_like_column(x_col):
+        flags.append("x_outcome_like")
+    if _is_leakage_like_column(x_col):
+        flags.append("x_model_output_like")
+    if _is_post_treatment_hint_column(x_col):
+        flags.append("x_post_treatment_hint")
+    if y_name in x_name or x_name in y_name:
+        flags.append("x_name_overlaps_y")
+    if y_type == "binary" and x_type == "categorical":
+        flags.append("x_categorical_binary_screen_only")
+
+    level = "low"
+    penalty = 0.0
+    if "x_outcome_like" in flags or "x_model_output_like" in flags:
+        level = "high"
+        penalty = 0.30
+    elif flags:
+        level = "medium"
+        penalty = 0.12
+    return {
+        "risk_flags": flags,
+        "risk_level": level,
+        "risk_penalty": float(penalty),
+    }
+
+
+def _pair_score(
+    *,
+    df: pd.DataFrame,
+    y_col: str,
+    y_type: str,
+    x_col: str,
+    x_type: str,
+) -> Optional[Dict[str, Any]]:
+    if y_col == x_col:
+        return None
+
+    y_raw = df[y_col]
+    x_raw = df[x_col]
+    if x_type == "numeric":
+        xv = _numeric_series(x_raw)
+    elif x_type == "time":
+        xv = _to_time_numeric(x_raw)
+    else:
+        xv = x_raw.astype(str).where(x_raw.notna(), other=pd.NA)
+
+    if y_type == "binary":
+        yv_num = _numeric_series(y_raw)
+        yv = yv_num.where(yv_num.isin([0, 1]), other=pd.NA)
+    else:
+        yv = _numeric_series(y_raw)
+
+    pair = pd.DataFrame({"y": yv, "x": xv}).dropna()
+    n = int(len(pair))
+    n_total = int(len(df))
+    min_support = min(30, max(12, int(n_total * 0.50)))
+    if n < min_support:
+        return None
+
+    score = None
+    signal = ""
+    if y_type == "binary" and x_type in {"numeric", "time"}:
+        g1 = pair.loc[pair["y"] == 1, "x"]
+        g0 = pair.loc[pair["y"] == 0, "x"]
+        if g1.empty or g0.empty:
+            return None
+        mean1 = _safe_float(g1.mean()) or 0.0
+        mean0 = _safe_float(g0.mean()) or 0.0
+        std = _safe_float(pair["x"].std(ddof=0)) or 0.0
+        score = abs(mean1 - mean0) / (std + 1e-12)
+        signal = f"group-mean gap (y=1:{mean1:.3g}, y=0:{mean0:.3g})"
+    elif y_type == "binary" and x_type == "categorical":
+        group_rate = pair.groupby("x")["y"].mean()
+        if len(group_rate) < 2:
+            return None
+        max_rate = _safe_float(group_rate.max()) or 0.0
+        min_rate = _safe_float(group_rate.min()) or 0.0
+        score = abs(max_rate - min_rate)
+        signal = f"group positive-rate spread ({min_rate:.3g}..{max_rate:.3g})"
+    elif y_type in {"count", "continuous"} and x_type in {"numeric", "time"}:
+        corr = _safe_float(pair["y"].corr(pair["x"]))
+        if corr is None:
+            return None
+        score = abs(corr)
+        signal = f"abs corr = {corr:.3g}"
+    elif y_type in {"count", "continuous"} and x_type == "categorical":
+        group_mean = pair.groupby("x")["y"].mean()
+        if len(group_mean) < 2:
+            return None
+        y_std = _safe_float(pair["y"].std(ddof=0)) or 0.0
+        spread = (_safe_float(group_mean.max()) or 0.0) - (_safe_float(group_mean.min()) or 0.0)
+        score = abs(spread) / (y_std + 1e-12)
+        signal = f"group mean spread/std = {score:.3g}"
+    else:
+        return None
+
+    if score is None:
+        return None
+    risk = _assess_seed_risk(y_col=y_col, x_col=x_col, x_type=x_type, y_type=y_type)
+    adjusted_score = float(score) * (1.0 - float(risk["risk_penalty"]))
+    return {
+        "y_col": y_col,
+        "y_type": y_type,
+        "x_col": x_col,
+        "x_type": x_type,
+        "score": float(score),
+        "score_adjusted": float(adjusted_score),
+        "support_rows": n,
+        "pair_nonmissing_share": float(n / float(len(df))) if len(df) > 0 else 0.0,
+        "signal_summary": signal,
+        "risk_level": str(risk["risk_level"]),
+        "risk_flags": list(risk["risk_flags"]),
+        "label": f"{y_col} ~ {x_col}",
+    }
+
+
+def _build_question_seeds(
+    *,
+    df: pd.DataFrame,
+    y_candidates: List[Dict[str, Any]],
+    x_candidates: List[Dict[str, Any]],
+    top_n: int,
+) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+    y_pool = y_candidates[:8]
+    y_name_set = {str(y.get("name", "")).strip() for y in y_pool}
+    x_pool = x_candidates[:24]
+    for y in y_pool:
+        y_col = str(y["name"])
+        y_type = str(y["y_type"])
+        for x in x_pool:
+            x_col = str(x["name"])
+            if x_col in y_name_set:
+                continue
+            x_type = str(x["x_type"])
+            score_row = _pair_score(df=df, y_col=y_col, y_type=y_type, x_col=x_col, x_type=x_type)
+            if score_row is None:
+                continue
+            rows.append(score_row)
+
+    rows_sorted = sorted(
+        rows,
+        key=lambda r: (
+            float(r.get("score_adjusted") or 0.0),
+            float(r.get("score") or 0.0),
+            float(r.get("pair_nonmissing_share") or 0.0),
+        ),
+        reverse=True,
+    )
+    out: List[Dict[str, Any]] = []
+    for idx, row in enumerate(rows_sorted[: max(1, int(top_n))], start=1):
+        copied = dict(row)
+        copied["rank"] = int(idx)
+        out.append(copied)
+    return out
+
+
+def profile_dataset_csv(
+    *,
+    dataset_path: Path,
+    sample_rows: int = 20000,
+    top_n: int = 20,
+    research_mode: bool = True,
+    fixed_y: str = "",
+    exclude_x_cols: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    nrows = max(1, int(sample_rows))
+    df = pd.read_csv(dataset_path, nrows=nrows, low_memory=False)
+    if df.empty:
+        raise ValueError(f"dataset has no rows: {dataset_path}")
+
+    row_count = int(len(df))
+    column_count = int(len(df.columns))
+    columns: List[Dict[str, Any]] = []
+    for col_name in df.columns:
+        columns.append(
+            _build_column_profile(
+                name=str(col_name),
+                series=df[col_name],
+                n_rows=row_count,
+            )
+        )
+
+    columns_sorted = sorted(columns, key=lambda c: float(c.get("missing_share") or 0.0), reverse=True)
+    y_candidates = _select_y_candidates(columns)
+    fixed_y_text = str(fixed_y or "").strip()
+    fixed_y_used = ""
+    if fixed_y_text:
+        by_norm = {_norm_name(str(c.get("name", ""))): c for c in columns}
+        fixed_col = by_norm.get(_norm_name(fixed_y_text))
+        if fixed_col is None:
+            raise ValueError(f"fixed_y not found in dataset columns: {fixed_y_text}")
+        fixed_y_row = _to_y_candidate(fixed_col)
+        if fixed_y_row is None:
+            raise ValueError(f"fixed_y is not a valid numeric/binary target candidate: {fixed_y_text}")
+        fixed_y_used = str(fixed_y_row["name"])
+        y_candidates = [fixed_y_row]
+
+    raw_exclude = exclude_x_cols or []
+    exclude_x_norm = {_norm_name(x) for x in raw_exclude if str(x).strip()}
+    y_name_set = {_norm_name(str(row.get("name", ""))) for row in y_candidates if str(row.get("name", "")).strip()}
+    x_candidates = _select_x_candidates(
+        columns,
+        n_rows=row_count,
+        research_mode=bool(research_mode),
+        y_names=y_name_set,
+        exclude_x_names=exclude_x_norm,
+    )
+    question_seeds = _build_question_seeds(
+        df=df,
+        y_candidates=y_candidates,
+        x_candidates=x_candidates,
+        top_n=max(1, int(top_n)),
+    )
+
+    charts = {
+        "missing_share_top": [
+            {"column": c["name"], "missing_share": float(c.get("missing_share") or 0.0)}
+            for c in columns_sorted[:12]
+        ],
+        "unique_share_top": [
+            {"column": c["name"], "unique_share": float(c.get("unique_share") or 0.0)}
+            for c in sorted(columns, key=lambda c: float(c.get("unique_share") or 0.0), reverse=True)[:12]
+        ],
+        "seed_score_top": [
+            {"label": s["label"], "score": float(s.get("score") or 0.0)} for s in question_seeds[:12]
+        ],
+    }
+
+    return {
+        "dataset_path": str(dataset_path),
+        "row_count": row_count,
+        "column_count": column_count,
+        "sample_rows_used": row_count,
+        "research_mode": bool(research_mode),
+        "fixed_y": fixed_y_used,
+        "exclude_x_cols": sorted(exclude_x_norm),
+        "columns": columns,
+        "y_candidates": y_candidates,
+        "x_candidates": x_candidates,
+        "question_seeds": question_seeds,
+        "charts": charts,
+    }
