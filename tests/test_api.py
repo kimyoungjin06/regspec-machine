@@ -311,11 +311,23 @@ def test_api_ui_endpoint_serves_html_console() -> None:
     assert "export_compare_json_btn" in resp.text
     assert "list_mode_filter" in resp.text
     assert "list_run_id_filter" in resp.text
+    assert "recent_run_select" in resp.text
+    assert "load_recent_run_btn" in resp.text
+    assert "inspect_profile_btn" in resp.text
     assert "runs_notice" in resp.text
+    assert "Saved Reports" in resp.text
+    assert "saved_report_kind" in resp.text
+    assert "saved_report_select" in resp.text
+    assert "refresh_saved_reports_btn" in resp.text
+    assert "load_saved_report_btn" in resp.text
+    assert "saved_report_box" in resp.text
     assert "Dataset Explorer (Question Seeder)" in resp.text
     assert "dataset_run_id" in resp.text
     assert "dataset_path" in resp.text
     assert "profile_btn" in resp.text
+    assert "dataset_config_notice" in resp.text
+    assert "load_dataset_config_btn" in resp.text
+    assert "save_dataset_config_btn" in resp.text
     assert "profile_seed_tbody" in resp.text
     assert "dataset_research_mode" in resp.text
     assert "dataset_fixed_y" in resp.text
@@ -875,3 +887,95 @@ def test_api_dataset_profile_from_run_artifact(tmp_path: Path) -> None:
     assert payload["artifact_key"] == "scan_runs_csv"
     assert payload["row_count"] == 3
     assert payload["resolved_dataset_path"].endswith("ut_dataset_profile_artifact_scan_runs.csv")
+
+
+def test_api_dataset_config_roundtrip(tmp_path: Path) -> None:
+    class _ConfigEngine:
+        def __init__(self, workspace_root: Path) -> None:
+            self.workspace_root = workspace_root
+
+        def execute(self, request: RunRequestContract, *, dry_run: bool = False) -> EngineExecution:
+            raise RuntimeError("not used in dataset config test")
+
+    orch = RunOrchestrator(engine=_ConfigEngine(workspace_root=tmp_path))
+    app = create_app(orchestrator=orch)
+    client = TestClient(app)
+
+    before = client.get("/datasets/config")
+    assert before.status_code == 200
+    before_payload = before.json()
+    assert before_payload["exists"] is False
+    assert before_payload["config"]["artifact_key"] == "auto"
+    assert before_payload["config"]["sample_rows"] == 20000
+
+    save = client.post(
+        "/datasets/config",
+        json={
+            "dataset_path": "data/interim/phase_b_policy_cited_twinpapers_expanded_universe_20260219.csv",
+            "run_id": "ut_saved_cfg",
+            "artifact_key": "scan_runs_csv",
+            "sample_rows": 12000,
+            "top_n": 25,
+            "research_mode": True,
+            "fixed_y": "policy_cited_5y",
+            "exclude_x_cols": "policy_cite_count_5y,q_value_validation",
+        },
+    )
+    assert save.status_code == 200
+    saved = save.json()
+    assert saved["saved"] is True
+    assert saved["config"]["artifact_key"] == "scan_runs_csv"
+    assert saved["config"]["sample_rows"] == 12000
+    assert saved["config"]["top_n"] == 25
+
+    after = client.get("/datasets/config")
+    assert after.status_code == 200
+    after_payload = after.json()
+    assert after_payload["exists"] is True
+    assert after_payload["config"]["run_id"] == "ut_saved_cfg"
+    assert after_payload["config"]["fixed_y"] == "policy_cited_5y"
+
+    bad = client.post("/datasets/config", json={"artifact_key": "bad"})
+    assert bad.status_code == 422
+
+
+def test_api_saved_reports_list_and_read(tmp_path: Path) -> None:
+    class _IdleEngine:
+        def __init__(self, workspace_root: Path) -> None:
+            self.workspace_root = workspace_root
+
+        def execute(self, request: RunRequestContract, *, dry_run: bool = False) -> EngineExecution:
+            raise RuntimeError("not used in saved reports test")
+
+    compare_dir = tmp_path / "outputs" / "reports" / "regspec_compare"
+    dataset_dir = tmp_path / "outputs" / "reports" / "regspec_dataset_profile_compare"
+    compare_dir.mkdir(parents=True, exist_ok=True)
+    dataset_dir.mkdir(parents=True, exist_ok=True)
+    (compare_dir / "compare_ut_1.md").write_text("# compare one\n", encoding="utf-8")
+    (compare_dir / "compare_ut_1.json").write_text('{"ok": true}\n', encoding="utf-8")
+    (dataset_dir / "dataset_compare_ut_1.md").write_text("# dataset compare one\n", encoding="utf-8")
+
+    orch = RunOrchestrator(engine=_IdleEngine(workspace_root=tmp_path))
+    app = create_app(orchestrator=orch)
+    client = TestClient(app)
+
+    listed = client.get("/reports/saved", params={"kind": "all", "limit": 50})
+    assert listed.status_code == 200
+    rows = listed.json()["rows"]
+    assert len(rows) >= 3
+    kinds = {str(row.get("kind")) for row in rows}
+    assert "regspec_compare" in kinds
+    assert "regspec_dataset_profile_compare" in kinds
+
+    sample = rows[0]
+    rel = str(sample.get("relative_path"))
+    read_resp = client.get("/reports/read", params={"relative_path": rel})
+    assert read_resp.status_code == 200
+    read_payload = read_resp.json()
+    assert read_payload["relative_path"] == rel
+    assert "text" in read_payload
+    if rel.endswith(".json"):
+        assert isinstance(read_payload.get("parsed_json"), dict)
+
+    bad = client.get("/reports/read", params={"relative_path": "../outside.md"})
+    assert bad.status_code == 422

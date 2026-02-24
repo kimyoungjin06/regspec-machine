@@ -124,6 +124,57 @@ def _parse_csv_list(text: str) -> List[str]:
     return rows
 
 
+def _default_dataset_config() -> Dict[str, Any]:
+    return {
+        "dataset_path": "",
+        "run_id": "",
+        "artifact_key": "auto",
+        "sample_rows": 20000,
+        "top_n": 20,
+        "research_mode": True,
+        "fixed_y": "",
+        "exclude_x_cols": "",
+    }
+
+
+def _dataset_config_path(*, workspace_root: Path) -> Path:
+    return workspace_root / "data" / "metadata" / "regspec_machine_dataset_profile_config.json"
+
+
+def _normalize_dataset_config(raw: Mapping[str, Any]) -> Dict[str, Any]:
+    base = _default_dataset_config()
+    out: Dict[str, Any] = {}
+    out["dataset_path"] = str(raw.get("dataset_path", base["dataset_path"]) or "").strip()
+    out["run_id"] = str(raw.get("run_id", base["run_id"]) or "").strip()
+    artifact_key = str(raw.get("artifact_key", base["artifact_key"]) or "auto").strip().lower()
+    if artifact_key not in {"auto", "scan_runs_csv", "top_models_inference_csv", "top_models_csv"}:
+        raise ValueError(
+            "artifact_key must be one of: auto, scan_runs_csv, top_models_inference_csv, top_models_csv"
+        )
+    out["artifact_key"] = artifact_key
+
+    try:
+        sample_rows = int(raw.get("sample_rows", base["sample_rows"]))
+    except Exception as exc:
+        raise ValueError("sample_rows must be an integer") from exc
+    if sample_rows < 100 or sample_rows > 500000:
+        raise ValueError("sample_rows must be in [100, 500000]")
+    out["sample_rows"] = sample_rows
+
+    try:
+        top_n = int(raw.get("top_n", base["top_n"]))
+    except Exception as exc:
+        raise ValueError("top_n must be an integer") from exc
+    if top_n < 1 or top_n > 100:
+        raise ValueError("top_n must be in [1, 100]")
+    out["top_n"] = top_n
+
+    out["research_mode"] = bool(raw.get("research_mode", base["research_mode"]))
+    out["fixed_y"] = str(raw.get("fixed_y", base["fixed_y"]) or "").strip()
+    out["exclude_x_cols"] = str(raw.get("exclude_x_cols", base["exclude_x_cols"]) or "").strip()
+    return out
+
+
 def _is_nooption_mode(mode: str) -> bool:
     text = str(mode or "").strip().lower()
     return text in {"nooption", "nooption_baseline", "nooption_hypothesis_panel"}
@@ -632,6 +683,77 @@ def _write_compare_exports(
         "json": str(json_path),
         "markdown": str(md_path),
     }
+
+
+def _report_roots(*, workspace_root: Path) -> Dict[str, Path]:
+    base = workspace_root / "outputs" / "reports"
+    return {
+        "regspec_compare": base / "regspec_compare",
+        "regspec_dataset_profile_compare": base / "regspec_dataset_profile_compare",
+    }
+
+
+def _list_saved_reports(
+    *,
+    workspace_root: Path,
+    kind: str,
+    limit: int,
+) -> List[Dict[str, Any]]:
+    kind_text = str(kind or "all").strip().lower()
+    allowed = _report_roots(workspace_root=workspace_root)
+    if kind_text not in {"all", *allowed.keys()}:
+        raise ValueError(
+            "kind must be one of: all, regspec_compare, regspec_dataset_profile_compare"
+        )
+
+    rows: List[Dict[str, Any]] = []
+    roots = allowed.items() if kind_text == "all" else [(kind_text, allowed[kind_text])]
+    for report_kind, root in roots:
+        if not root.is_dir():
+            continue
+        for path in root.iterdir():
+            if not path.is_file():
+                continue
+            suffix = path.suffix.lower()
+            if suffix not in {".json", ".md"}:
+                continue
+            stat = path.stat()
+            modified_utc = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            rows.append(
+                {
+                    "kind": report_kind,
+                    "file_name": path.name,
+                    "relative_path": str(path.resolve().relative_to(workspace_root.resolve())),
+                    "size_bytes": int(stat.st_size),
+                    "modified_at_utc": modified_utc,
+                }
+            )
+
+    rows_sorted = sorted(rows, key=lambda r: (str(r["modified_at_utc"]), str(r["relative_path"])), reverse=True)
+    return rows_sorted[: max(1, int(limit))]
+
+
+def _resolve_saved_report_path(
+    *,
+    workspace_root: Path,
+    relative_path: str,
+) -> Path:
+    rel_text = str(relative_path or "").strip()
+    if not rel_text:
+        raise ValueError("relative_path is required")
+    rel_path = Path(rel_text)
+    if rel_path.is_absolute():
+        raise ValueError("relative_path must be workspace-relative")
+
+    reports_root = (workspace_root / "outputs" / "reports").resolve()
+    path = (workspace_root / rel_path).resolve()
+    if not (path == reports_root or reports_root in path.parents):
+        raise ValueError("relative_path must be under outputs/reports")
+    if path.suffix.lower() not in {".json", ".md"}:
+        raise ValueError("relative_path must end with .json or .md")
+    if not path.is_file():
+        raise FileNotFoundError(f"saved report not found: {rel_path}")
+    return path
 
 
 def create_app(
@@ -1303,6 +1425,99 @@ def create_app(
             }
         )
         return payload
+
+    @app.get("/datasets/config")
+    def get_dataset_config() -> Dict[str, Any]:
+        path = _dataset_config_path(workspace_root=_workspace_root())
+        if not path.is_file():
+            return {
+                "exists": False,
+                "path": str(path),
+                "config": _default_dataset_config(),
+            }
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(raw, Mapping):
+                raise ValueError("config file must contain a JSON object")
+            config = _normalize_dataset_config(raw)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"dataset config read failed: {exc}") from exc
+        return {
+            "exists": True,
+            "path": str(path),
+            "config": config,
+        }
+
+    @app.post("/datasets/config")
+    def save_dataset_config(payload: Dict[str, Any]) -> Dict[str, Any]:
+        try:
+            config = _normalize_dataset_config(payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+        path = _dataset_config_path(workspace_root=_workspace_root())
+        path.parent.mkdir(parents=True, exist_ok=True)
+        to_write = dict(config)
+        to_write["updated_at_utc"] = _utc_now_isoz()
+        path.write_text(json.dumps(to_write, ensure_ascii=False, indent=2), encoding="utf-8")
+        return {
+            "saved": True,
+            "path": str(path),
+            "config": config,
+            "updated_at_utc": to_write["updated_at_utc"],
+        }
+
+    @app.get("/reports/saved")
+    def list_saved_reports(
+        kind: str = Query(default="all"),
+        limit: int = Query(default=100, ge=1, le=500),
+    ) -> Dict[str, Any]:
+        try:
+            rows = _list_saved_reports(
+                workspace_root=_workspace_root(),
+                kind=str(kind),
+                limit=int(limit),
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return {
+            "rows": rows,
+            "total_rows": int(len(rows)),
+            "kind": str(kind),
+        }
+
+    @app.get("/reports/read")
+    def read_saved_report(
+        relative_path: str = Query(default=""),
+        max_chars: int = Query(default=200000, ge=1000, le=2000000),
+    ) -> Dict[str, Any]:
+        try:
+            path = _resolve_saved_report_path(
+                workspace_root=_workspace_root(),
+                relative_path=str(relative_path),
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+        text = path.read_text(encoding="utf-8")
+        truncated = len(text) > int(max_chars)
+        text_out = text[: int(max_chars)] if truncated else text
+        parsed_json = None
+        if path.suffix.lower() == ".json":
+            try:
+                parsed_json = json.loads(text)
+            except Exception:
+                parsed_json = None
+
+        return {
+            "relative_path": str(path.resolve().relative_to(_workspace_root().resolve())),
+            "size_chars": int(len(text)),
+            "truncated": bool(truncated),
+            "text": text_out,
+            "parsed_json": parsed_json,
+        }
 
     @app.get("/ui", response_class=HTMLResponse)
     def ui_index() -> HTMLResponse:

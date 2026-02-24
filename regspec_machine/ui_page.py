@@ -620,7 +620,22 @@ __MODE_FILTER_OPTIONS__
         <div class="toolbar">
           <button id="inspect_btn">Inspect</button>
           <button id="refresh_runs_btn" class="ghost">Refresh Run List</button>
+          <button id="inspect_profile_btn" class="secondary">Inspect + Profile Dataset</button>
           <label class="inline"><input id="auto_refresh" type="checkbox" checked /> auto refresh (4s)</label>
+        </div>
+        <div class="row">
+          <div>
+            <label for="recent_run_select">recent/history run</label>
+            <select id="recent_run_select">
+              <option value="">select from run list after refresh</option>
+            </select>
+          </div>
+          <div>
+            <label>quick action</label>
+            <div class="toolbar">
+              <button id="load_recent_run_btn" class="ghost">Load Selected Run</button>
+            </div>
+          </div>
         </div>
         <div id="detail_notice" class="notice">Select a run to inspect.</div>
         <label>Interpreted Summary</label>
@@ -685,6 +700,41 @@ __MODE_FILTER_OPTIONS__
     </section>
 
     <section class="card" style="margin-top: 14px;">
+      <h2>Saved Reports</h2>
+      <div class="row">
+        <div>
+          <label for="saved_report_kind">report kind</label>
+          <select id="saved_report_kind">
+            <option value="all">all</option>
+            <option value="regspec_compare">regspec_compare</option>
+            <option value="regspec_dataset_profile_compare">regspec_dataset_profile_compare</option>
+          </select>
+        </div>
+        <div>
+          <label for="saved_report_select">saved file</label>
+          <select id="saved_report_select">
+            <option value="">refresh to load saved report list</option>
+          </select>
+        </div>
+      </div>
+      <div class="toolbar">
+        <button id="refresh_saved_reports_btn" class="ghost">Refresh Saved Reports</button>
+        <button id="load_saved_report_btn" class="secondary">Load Saved Report</button>
+      </div>
+      <div id="saved_reports_notice" class="notice">ready</div>
+      <label>Saved Report Summary</label>
+      <div class="run-table-wrap compact-table">
+        <table>
+          <tbody id="saved_report_meta_tbody"></tbody>
+        </table>
+      </div>
+      <details>
+        <summary>Saved Report Preview</summary>
+        <div id="saved_report_box" class="mono">{}</div>
+      </details>
+    </section>
+
+    <section class="card" style="margin-top: 14px;">
       <h2>Dataset Explorer (Question Seeder)</h2>
       <div class="row">
         <div>
@@ -739,9 +789,15 @@ __MODE_FILTER_OPTIONS__
           <label>profile status</label>
           <div id="profile_notice" class="notice">ready</div>
         </div>
+        <div>
+          <label>dataset config</label>
+          <div id="dataset_config_notice" class="notice">not loaded</div>
+        </div>
       </div>
       <div class="toolbar">
         <button id="profile_btn" class="secondary">Analyze Dataset</button>
+        <button id="load_dataset_config_btn" class="ghost">Load Data Config</button>
+        <button id="save_dataset_config_btn" class="ghost">Save Data Config</button>
       </div>
       <label>Profile Summary</label>
       <div class="run-table-wrap compact-table">
@@ -828,6 +884,9 @@ __MODE_FILTER_OPTIONS__
       runsBusy: false,
       healthBusy: false,
       compareBusy: false,
+      savedReportsBusy: false,
+      savedReports: [],
+      lastRunRows: [],
       compareSnapshot: null,
     };
 
@@ -931,6 +990,90 @@ __MODE_FILTER_OPTIONS__
       return n;
     }
 
+    function applyRunIdToDatasetInputs(runId) {
+      const rid = validateRunId(String(runId || "").trim());
+      byId("dataset_run_id").value = rid;
+      byId("dataset_artifact_key").value = "auto";
+      byId("dataset_path").value = "";
+    }
+
+    function datasetConfigPayloadFromInputs() {
+      return {
+        dataset_path: String(byId("dataset_path").value || "").trim(),
+        run_id: String(byId("dataset_run_id").value || "").trim(),
+        artifact_key: String(byId("dataset_artifact_key").value || "auto").trim(),
+        sample_rows: parseBoundedInt("dataset_sample_rows", "dataset_sample_rows", 100, 500000),
+        top_n: parseBoundedInt("dataset_top_n", "dataset_top_n", 1, 100),
+        research_mode: Boolean(byId("dataset_research_mode").checked),
+        fixed_y: String(byId("dataset_fixed_y").value || "").trim(),
+        exclude_x_cols: String(byId("dataset_exclude_x_cols").value || "").trim(),
+      };
+    }
+
+    function applyDatasetConfig(config) {
+      const cfg = config && typeof config === "object" ? config : {};
+      byId("dataset_path").value = String(cfg.dataset_path || "");
+      byId("dataset_run_id").value = String(cfg.run_id || "");
+      byId("dataset_artifact_key").value = String(cfg.artifact_key || "auto");
+      if (cfg.sample_rows !== undefined && cfg.sample_rows !== null) {
+        byId("dataset_sample_rows").value = String(cfg.sample_rows);
+      }
+      if (cfg.top_n !== undefined && cfg.top_n !== null) {
+        byId("dataset_top_n").value = String(cfg.top_n);
+      }
+      byId("dataset_research_mode").checked = Boolean(cfg.research_mode !== false);
+      byId("dataset_fixed_y").value = String(cfg.fixed_y || "");
+      byId("dataset_exclude_x_cols").value = String(cfg.exclude_x_cols || "");
+    }
+
+    function renderRecentRunSelect(rows) {
+      const select = byId("recent_run_select");
+      const selectedPrev = String(select.value || "").trim();
+      select.replaceChildren();
+
+      const first = document.createElement("option");
+      first.value = "";
+      first.textContent = "select recent/history run";
+      select.appendChild(first);
+
+      for (const row of (Array.isArray(rows) ? rows : []).slice(0, 120)) {
+        const rid = String(row.run_id || "").trim();
+        if (!rid) continue;
+        const option = document.createElement("option");
+        option.value = rid;
+        option.textContent = rid + " [" + String(row.mode || "-") + " / " + String(row.state || "-") + "]";
+        select.appendChild(option);
+      }
+
+      if (selectedPrev && Array.from(select.options).some((o) => String(o.value) === selectedPrev)) {
+        select.value = selectedPrev;
+      }
+    }
+
+    async function inspectFromRecentSelect() {
+      const rid = String(byId("recent_run_select").value || "").trim();
+      if (!rid) {
+        setNotice(byId("detail_notice"), "error", "select a run from recent/history run first");
+        return;
+      }
+      byId("detail_run_id").value = rid;
+      await inspectRun(rid);
+    }
+
+    async function inspectAndProfileFromDetail() {
+      const fallback = String(byId("recent_run_select").value || "").trim();
+      const ridText = String(byId("detail_run_id").value || "").trim() || fallback;
+      if (!ridText) {
+        setNotice(byId("detail_notice"), "error", "detail run_id or recent run selection is required");
+        return;
+      }
+      const rid = validateRunId(ridText);
+      byId("detail_run_id").value = rid;
+      await inspectRun(rid);
+      applyRunIdToDatasetInputs(rid);
+      await runDatasetProfile();
+    }
+
     function setSubmitBusy(flag) {
       UI_STATE.submitBusy = Boolean(flag);
       const btn = byId("submit_btn");
@@ -946,6 +1089,8 @@ __MODE_FILTER_OPTIONS__
       const btn = byId("inspect_btn");
       btn.disabled = UI_STATE.inspectBusy;
       btn.textContent = UI_STATE.inspectBusy ? "Inspecting..." : "Inspect";
+      byId("inspect_profile_btn").disabled = UI_STATE.inspectBusy;
+      byId("load_recent_run_btn").disabled = UI_STATE.inspectBusy;
     }
 
     function setProfileBusy(flag) {
@@ -962,6 +1107,13 @@ __MODE_FILTER_OPTIONS__
       btn.textContent = UI_STATE.compareBusy ? "Comparing..." : "Compare Runs";
       byId("compare_from_detail_btn").disabled = UI_STATE.compareBusy;
       updateCompareExportButtons();
+    }
+
+    function setSavedReportsBusy(flag) {
+      UI_STATE.savedReportsBusy = Boolean(flag);
+      byId("refresh_saved_reports_btn").disabled = UI_STATE.savedReportsBusy;
+      byId("load_saved_report_btn").disabled = UI_STATE.savedReportsBusy;
+      byId("saved_report_select").disabled = UI_STATE.savedReportsBusy;
     }
 
     function hasCompareSnapshot() {
@@ -1574,6 +1726,138 @@ __MODE_FILTER_OPTIONS__
       }
     }
 
+    async function loadDatasetConfig() {
+      const notice = byId("dataset_config_notice");
+      try {
+        setNotice(notice, "", "loading data config...");
+        const payload = await fetchJson("/datasets/config");
+        const config = payload && payload.config && typeof payload.config === "object" ? payload.config : {};
+        applyDatasetConfig(config);
+        const exists = Boolean(payload.exists);
+        setNotice(
+          notice,
+          exists ? "ok" : "",
+          exists ? "loaded saved data config" : "no saved config, using defaults"
+        );
+      } catch (err) {
+        setNotice(notice, "error", String(err && err.message ? err.message : err));
+      }
+    }
+
+    async function saveDatasetConfig() {
+      const notice = byId("dataset_config_notice");
+      try {
+        const payload = datasetConfigPayloadFromInputs();
+        setNotice(notice, "", "saving data config...");
+        const out = await fetchJson("/datasets/config", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        setNotice(notice, "ok", "saved data config: " + String(out.updated_at_utc || "-"));
+      } catch (err) {
+        setNotice(notice, "error", String(err && err.message ? err.message : err));
+      }
+    }
+
+    function renderSavedReportMeta(row) {
+      const tbody = byId("saved_report_meta_tbody");
+      tbody.replaceChildren();
+      const data = row && typeof row === "object" ? row : {};
+      appendOverviewRow(tbody, "kind", data.kind || "-");
+      appendOverviewRow(tbody, "file_name", data.file_name || "-");
+      appendOverviewRow(tbody, "relative_path", data.relative_path || "-");
+      appendOverviewRow(tbody, "size_bytes", fmt(data.size_bytes));
+      appendOverviewRow(tbody, "modified_at_utc", data.modified_at_utc || "-");
+    }
+
+    function selectedSavedReportRow() {
+      const rel = String(byId("saved_report_select").value || "").trim();
+      if (!rel) return null;
+      const rows = Array.isArray(UI_STATE.savedReports) ? UI_STATE.savedReports : [];
+      return rows.find((row) => String(row.relative_path || "") === rel) || null;
+    }
+
+    async function refreshSavedReports() {
+      if (UI_STATE.savedReportsBusy) return;
+      const notice = byId("saved_reports_notice");
+      try {
+        const kind = String(byId("saved_report_kind").value || "all").trim();
+        setSavedReportsBusy(true);
+        setNotice(notice, "", "loading saved reports...");
+        const payload = await fetchJson("/reports/saved?kind=" + encodeURIComponent(kind) + "&limit=200");
+        const rows = Array.isArray(payload.rows) ? payload.rows : [];
+        UI_STATE.savedReports = rows;
+
+        const select = byId("saved_report_select");
+        const prev = String(select.value || "").trim();
+        select.replaceChildren();
+
+        const first = document.createElement("option");
+        first.value = "";
+        first.textContent = rows.length ? "select saved report file" : "no saved reports found";
+        select.appendChild(first);
+        for (const row of rows) {
+          const rel = String(row.relative_path || "").trim();
+          if (!rel) continue;
+          const opt = document.createElement("option");
+          opt.value = rel;
+          opt.textContent = String(row.modified_at_utc || "-") + " | " + rel;
+          select.appendChild(opt);
+        }
+        if (prev && rows.some((row) => String(row.relative_path || "") === prev)) {
+          select.value = prev;
+        }
+        renderSavedReportMeta(selectedSavedReportRow() || rows[0] || {});
+        setNotice(notice, "ok", "saved reports loaded: " + String(rows.length));
+      } catch (err) {
+        setNotice(notice, "error", String(err && err.message ? err.message : err));
+      } finally {
+        setSavedReportsBusy(false);
+      }
+    }
+
+    async function loadSavedReport() {
+      if (UI_STATE.savedReportsBusy) return;
+      const notice = byId("saved_reports_notice");
+      const rel = String(byId("saved_report_select").value || "").trim();
+      if (!rel) {
+        setNotice(notice, "error", "select a saved report first");
+        return;
+      }
+      try {
+        setSavedReportsBusy(true);
+        setNotice(notice, "", "loading saved report...");
+        const params = new URLSearchParams();
+        params.set("relative_path", rel);
+        params.set("max_chars", "200000");
+        const payload = await fetchJson("/reports/read?" + params.toString());
+        const parsed = payload && payload.parsed_json && typeof payload.parsed_json === "object"
+          ? payload.parsed_json
+          : null;
+        byId("saved_report_box").textContent = parsed ? prettyJson(parsed) : String(payload.text || "");
+        const row = selectedSavedReportRow();
+        renderSavedReportMeta(
+          row || {
+            kind: "-",
+            file_name: rel.split("/").slice(-1)[0] || rel,
+            relative_path: rel,
+            size_bytes: payload.size_chars,
+            modified_at_utc: "-",
+          }
+        );
+        setNotice(
+          notice,
+          "ok",
+          "loaded report: " + rel + (payload.truncated ? " (preview truncated)" : "")
+        );
+      } catch (err) {
+        setNotice(notice, "error", String(err && err.message ? err.message : err));
+      } finally {
+        setSavedReportsBusy(false);
+      }
+    }
+
     function renderDetailOverview(statusResp, summaryResp, reviewResp) {
       const tbody = byId("detail_overview_tbody");
       tbody.replaceChildren();
@@ -2138,6 +2422,9 @@ __MODE_FILTER_OPTIONS__
 
       setInspectBusy(true);
       byId("detail_run_id").value = rid;
+      if (Array.from(byId("recent_run_select").options || []).some((o) => String(o.value) === rid)) {
+        byId("recent_run_select").value = rid;
+      }
       setNotice(detailNotice, "", "loading run details...");
 
       try {
@@ -2193,6 +2480,8 @@ __MODE_FILTER_OPTIONS__
         if (runIdLike) query.set("run_id_contains", runIdLike);
         const payload = await fetchJson("/runs?" + query.toString());
         const rows = payload.rows || [];
+        UI_STATE.lastRunRows = rows;
+        renderRecentRunSelect(rows);
 
         const tbody = byId("runs_tbody");
         tbody.replaceChildren();
@@ -2343,11 +2632,55 @@ __MODE_FILTER_OPTIONS__
       byId("run_id").value = makeDefaultRunId(byId("mode").value || "ui_run");
     });
     byId("inspect_btn").addEventListener("click", onInspectClick);
+    byId("inspect_profile_btn").addEventListener("click", () => {
+      inspectAndProfileFromDetail().catch((err) => {
+        setNotice(byId("detail_notice"), "error", String(err && err.message ? err.message : err));
+      });
+    });
     byId("refresh_runs_btn").addEventListener("click", onRefreshRunsClick);
+    byId("load_recent_run_btn").addEventListener("click", () => {
+      inspectFromRecentSelect().catch((err) => {
+        setNotice(byId("detail_notice"), "error", String(err && err.message ? err.message : err));
+      });
+    });
+    byId("recent_run_select").addEventListener("change", () => {
+      const rid = String(byId("recent_run_select").value || "").trim();
+      if (!rid) return;
+      byId("detail_run_id").value = rid;
+    });
     byId("profile_btn").addEventListener("click", () => {
       runDatasetProfile().catch((err) => {
         setNotice(byId("profile_notice"), "error", String(err && err.message ? err.message : err));
       });
+    });
+    byId("load_dataset_config_btn").addEventListener("click", () => {
+      loadDatasetConfig().catch((err) => {
+        setNotice(byId("dataset_config_notice"), "error", String(err && err.message ? err.message : err));
+      });
+    });
+    byId("save_dataset_config_btn").addEventListener("click", () => {
+      saveDatasetConfig().catch((err) => {
+        setNotice(byId("dataset_config_notice"), "error", String(err && err.message ? err.message : err));
+      });
+    });
+    byId("refresh_saved_reports_btn").addEventListener("click", () => {
+      refreshSavedReports().catch((err) => {
+        setNotice(byId("saved_reports_notice"), "error", String(err && err.message ? err.message : err));
+      });
+    });
+    byId("load_saved_report_btn").addEventListener("click", () => {
+      loadSavedReport().catch((err) => {
+        setNotice(byId("saved_reports_notice"), "error", String(err && err.message ? err.message : err));
+      });
+    });
+    byId("saved_report_kind").addEventListener("change", () => {
+      refreshSavedReports().catch((err) => {
+        setNotice(byId("saved_reports_notice"), "error", String(err && err.message ? err.message : err));
+      });
+    });
+    byId("saved_report_select").addEventListener("change", () => {
+      const row = selectedSavedReportRow();
+      if (row) renderSavedReportMeta(row);
     });
 
     byId("preset_pair_btn").addEventListener("click", () => {
@@ -2447,7 +2780,16 @@ __MODE_FILTER_OPTIONS__
     updateCompareExportButtons();
 
     refreshHealth();
-    loadDatasetDefaultCandidate();
+    loadDatasetConfig().then(() => {
+      const hasAny = String(byId("dataset_path").value || "").trim() || String(byId("dataset_run_id").value || "").trim();
+      if (!hasAny) {
+        loadDatasetDefaultCandidate();
+      }
+    }).catch((err) => {
+      setNotice(byId("dataset_config_notice"), "error", String(err && err.message ? err.message : err));
+      loadDatasetDefaultCandidate();
+    });
+    refreshSavedReports();
     refreshRuns();
     setInterval(() => {
       tickAutoRefresh().catch((err) => {
