@@ -407,6 +407,11 @@ __MODE_OPTIONS__
           <button id="preset_singlex_btn" class="ghost">Preset: singlex baseline</button>
           <button id="preset_nooption_btn" class="ghost">Preset: nooption baseline</button>
         </div>
+        <div class="toolbar">
+          <button id="run_pair_now_btn" class="secondary">Run paired baseline now</button>
+          <button id="run_singlex_now_btn" class="secondary">Run singlex baseline now</button>
+          <button id="run_nooption_now_btn" class="secondary">Run nooption baseline now</button>
+        </div>
         <div class="row">
           <div>
             <label for="scan_n_bootstrap">scan_n_bootstrap (optional)</label>
@@ -595,6 +600,9 @@ __STATE_OPTIONS__
       const btn = byId("submit_btn");
       btn.disabled = UI_STATE.submitBusy;
       btn.textContent = UI_STATE.submitBusy ? "Submitting..." : "Submit Run";
+      byId("run_pair_now_btn").disabled = UI_STATE.submitBusy;
+      byId("run_singlex_now_btn").disabled = UI_STATE.submitBusy;
+      byId("run_nooption_now_btn").disabled = UI_STATE.submitBusy;
     }
 
     function setInspectBusy(flag) {
@@ -830,11 +838,15 @@ __STATE_OPTIONS__
       }
     }
 
-    async function submitRun() {
+    async function submitRun(overrides) {
       if (UI_STATE.submitBusy) return;
       const submitNotice = byId("submit_notice");
       try {
         const payload = payloadFromForm();
+        if (overrides && typeof overrides === "object") {
+          if (overrides.mode) payload.mode = String(overrides.mode);
+          if (overrides.run_id) payload.run_id = validateRunId(String(overrides.run_id));
+        }
         const execute = byId("execute").checked ? "true" : "false";
         const dryRun = byId("dry_run").checked ? "true" : "false";
 
@@ -858,6 +870,14 @@ __STATE_OPTIONS__
       } finally {
         setSubmitBusy(false);
       }
+    }
+
+    async function runPresetNow(mode, prefix) {
+      applyPreset(mode, prefix || mode);
+      await submitRun({
+        mode: mode,
+        run_id: byId("run_id").value,
+      });
     }
 
     async function inspectRun(runId) {
@@ -1039,6 +1059,21 @@ __STATE_OPTIONS__
     });
     byId("preset_nooption_btn").addEventListener("click", () => {
       applyPreset("nooption_baseline", "nooption_baseline");
+    });
+    byId("run_pair_now_btn").addEventListener("click", () => {
+      runPresetNow("paired_nooption_singlex", "pair_baseline").catch((err) => {
+        setNotice(byId("submit_notice"), "error", String(err && err.message ? err.message : err));
+      });
+    });
+    byId("run_singlex_now_btn").addEventListener("click", () => {
+      runPresetNow("singlex_baseline", "singlex_baseline").catch((err) => {
+        setNotice(byId("submit_notice"), "error", String(err && err.message ? err.message : err));
+      });
+    });
+    byId("run_nooption_now_btn").addEventListener("click", () => {
+      runPresetNow("nooption_baseline", "nooption_baseline").catch((err) => {
+        setNotice(byId("submit_notice"), "error", String(err && err.message ? err.message : err));
+      });
     });
 
     byId("mode").addEventListener("change", updateModeHelp);
