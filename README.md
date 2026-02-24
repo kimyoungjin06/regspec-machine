@@ -73,6 +73,7 @@ python -m pytest -q tests/test_parity_l2_l3_l4.py
 
 CI:
 - GitHub Actions runs `python -m pytest -q` on push/PR (`.github/workflows/ci.yml`)
+- CI also runs `regspec-build-desktop` smoke build and uploads bundle manifest artifact.
 
 ## Quick start (Python API)
 
@@ -175,6 +176,7 @@ Main endpoints:
 - `POST /runs/{run_id}/retry` (retry failed/cancelled)
 - `GET /runs/{run_id}/artifacts` (artifact manifest + existence checks)
 - `GET /ui` (L5 browser console: submit + monitor + summary inspect)
+  - run detail panel includes quick KPI cards (`validated`, `best p/q`, `restart`, leakage guard, consensus)
 
 ## Local Console Launcher (L6.1)
 

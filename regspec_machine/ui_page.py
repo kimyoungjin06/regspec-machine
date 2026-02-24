@@ -210,6 +210,38 @@ def build_ui_page_html(*, run_modes: Iterable[str]) -> str:
       color: var(--muted);
       font-size: 12px;
     }
+    .kpi-grid {
+      margin-top: 8px;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+    @media (min-width: 700px) {
+      .kpi-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+    }
+    .kpi-card {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #f8fbff;
+      padding: 8px;
+    }
+    .kpi-label {
+      font-size: 11px;
+      color: var(--muted);
+      margin-bottom: 3px;
+    }
+    .kpi-value {
+      font-size: 16px;
+      font-family: "Space Grotesk", "IBM Plex Sans", sans-serif;
+      font-weight: 700;
+      color: var(--ink);
+      line-height: 1.1;
+    }
+    .kpi-pass { color: var(--ok); }
+    .kpi-fail { color: var(--fail); }
+    .kpi-warn { color: var(--accent); }
   </style>
 </head>
 <body>
@@ -300,6 +332,7 @@ __STATE_OPTIONS__
         <label>summary</label>
         <div id="summary_box" class="mono">{}</div>
         <label>review (validated / p / q / restart / consensus)</label>
+        <div id="review_cards" class="kpi-grid"></div>
         <div id="review_box" class="mono">{}</div>
       </div>
     </section>
@@ -342,6 +375,64 @@ __STATE_OPTIONS__
 
     function prettyJson(obj) {
       return JSON.stringify(obj || {}, null, 2);
+    }
+
+    function fmt(v, digits) {
+      if (v === null || v === undefined || v === "") return "-";
+      if (typeof v === "number" && Number.isFinite(v)) {
+        if (typeof digits === "number") return v.toFixed(digits);
+        return String(v);
+      }
+      const n = Number(v);
+      if (Number.isFinite(n)) {
+        if (typeof digits === "number") return n.toFixed(digits);
+        return String(n);
+      }
+      return String(v);
+    }
+
+    function renderReviewCards(reviewResp) {
+      const wrap = byId("review_cards");
+      const review = reviewResp && reviewResp.review ? reviewResp.review : null;
+      if (!review) {
+        wrap.innerHTML = "";
+        return;
+      }
+      const metrics = review.metrics || {};
+      const gov = review.governance || {};
+      const leakOk = gov.validation_used_for_search_false === true;
+      const lockOk = gov.candidate_pool_locked_pre_validation_true === true;
+      const cards = [
+        { label: "validated", value: fmt(metrics.validated_candidate_count), cls: "" },
+        { label: "best p", value: fmt(metrics.best_p_validation, 4), cls: "" },
+        { label: "best q", value: fmt(metrics.best_q_validation, 4), cls: "" },
+        { label: "restart max", value: fmt(metrics.restart_validated_rate_max, 3), cls: "" },
+        { label: "restart mean", value: fmt(metrics.restart_validated_rate_mean, 3), cls: "" },
+        {
+          label: "consensus",
+          value: gov.track_consensus_enforced ? "enforced" : "off",
+          cls: gov.track_consensus_enforced ? "kpi-pass" : "kpi-warn",
+        },
+        {
+          label: "leakage guard",
+          value: leakOk ? "pass" : "fail",
+          cls: leakOk ? "kpi-pass" : "kpi-fail",
+        },
+        {
+          label: "pool lock",
+          value: lockOk ? "pass" : "fail",
+          cls: lockOk ? "kpi-pass" : "kpi-fail",
+        },
+      ];
+      wrap.innerHTML = cards
+        .map(
+          (c) =>
+            "<div class='kpi-card'>" +
+            "<div class='kpi-label'>" + c.label + "</div>" +
+            "<div class='kpi-value " + (c.cls || "") + "'>" + c.value + "</div>" +
+            "</div>"
+        )
+        .join("");
     }
 
     async function fetchJson(url, options) {
@@ -415,6 +506,7 @@ __STATE_OPTIONS__
       byId("summary_box").textContent = prettyJson(summary);
       const review = await fetchJson("/runs/" + encodeURIComponent(rid) + "/review");
       byId("review_box").textContent = prettyJson(review);
+      renderReviewCards(review);
     }
 
     async function refreshRuns() {
