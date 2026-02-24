@@ -12,6 +12,10 @@ def build_ui_page_html(*, run_modes: Iterable[str]) -> str:
     mode_options = "\n".join(
         f'<option value="{mode}">{mode}</option>' for mode in list(run_modes)
     )
+    mode_filter_options = "\n".join(
+        ['<option value="">all</option>']
+        + [f'<option value="{mode}">{mode}</option>' for mode in list(run_modes)]
+    )
     state_options = "\n".join(
         f'<option value="{state if state != "all" else ""}">{state}</option>'
         for state in RUN_STATE_VALUES
@@ -545,6 +549,18 @@ __STATE_OPTIONS__
             </select>
           </div>
         </div>
+        <div class="row">
+          <div>
+            <label for="list_mode_filter">mode filter</label>
+            <select id="list_mode_filter">
+__MODE_FILTER_OPTIONS__
+            </select>
+          </div>
+          <div>
+            <label for="list_run_id_filter">run_id contains</label>
+            <input id="list_run_id_filter" placeholder="optional run_id substring filter" />
+          </div>
+        </div>
         <div class="toolbar">
           <button id="inspect_btn">Inspect</button>
           <button id="refresh_runs_btn" class="ghost">Refresh Run List</button>
@@ -614,6 +630,7 @@ __STATE_OPTIONS__
 
     <section class="card" style="margin-top: 14px;">
       <h2>Run Monitor</h2>
+      <div id="runs_notice" class="notice">ready</div>
       <div class="run-table-wrap">
         <table>
           <thead>
@@ -782,11 +799,24 @@ __STATE_OPTIONS__
       );
     }
 
+    function readCompareRunIds() {
+      return {
+        nooption: String(byId("compare_nooption_run_id").value || "").trim(),
+        singlex: String(byId("compare_singlex_run_id").value || "").trim(),
+      };
+    }
+
+    function hasValidCompareRunIds() {
+      const ids = readCompareRunIds();
+      return RUN_ID_PATTERN.test(ids.nooption) && RUN_ID_PATTERN.test(ids.singlex);
+    }
+
     function updateCompareExportButtons() {
-      const disabled = UI_STATE.compareBusy || !hasCompareSnapshot();
-      byId("save_compare_outputs_btn").disabled = disabled;
-      byId("export_compare_md_btn").disabled = disabled;
-      byId("export_compare_json_btn").disabled = disabled;
+      const hasSnapshot = hasCompareSnapshot();
+      const hasIds = hasValidCompareRunIds();
+      byId("save_compare_outputs_btn").disabled = UI_STATE.compareBusy || !(hasSnapshot || hasIds);
+      byId("export_compare_md_btn").disabled = UI_STATE.compareBusy || !hasSnapshot;
+      byId("export_compare_json_btn").disabled = UI_STATE.compareBusy || !hasSnapshot;
     }
 
     function sanitizeFileNamePart(v) {
@@ -998,10 +1028,16 @@ __STATE_OPTIONS__
     }
 
     async function saveCompareOutputsToWorkspace() {
-      const snapshot = getCompareSnapshotForExport();
+      const snapshot = hasCompareSnapshot() ? getCompareSnapshotForExport() : null;
+      const ids = snapshot
+        ? {
+            nooption: String(snapshot.nooption && snapshot.nooption.run_id || "").trim(),
+            singlex: String(snapshot.singlex && snapshot.singlex.run_id || "").trim(),
+          }
+        : readCompareRunIds();
       const payload = {
-        nooption_run_id: String(snapshot.nooption && snapshot.nooption.run_id || "").trim(),
-        singlex_run_id: String(snapshot.singlex && snapshot.singlex.run_id || "").trim(),
+        nooption_run_id: validateRunId(ids.nooption),
+        singlex_run_id: validateRunId(ids.singlex),
       };
       if (!payload.nooption_run_id || !payload.singlex_run_id) {
         throw new Error("compare snapshot is missing run ids");
@@ -1012,12 +1048,16 @@ __STATE_OPTIONS__
         body: JSON.stringify(payload),
       });
       const outputs = out && out.outputs ? out.outputs : {};
+      const sources = out && out.sources ? out.sources : {};
       const jsonPath = String(outputs.json || "").trim();
       const mdPath = String(outputs.markdown || "").trim();
+      const sourceText =
+        "nooption=" + String(sources.nooption || "-") + ", singlex=" + String(sources.singlex || "-");
       setNotice(
         byId("compare_notice"),
         "ok",
-        "saved to outputs: " + (jsonPath || "-") + " / " + (mdPath || "-")
+        "saved to outputs: " + (jsonPath || "-") + " / " + (mdPath || "-") +
+          " (source: " + sourceText + ")"
       );
     }
 
@@ -1039,7 +1079,21 @@ __STATE_OPTIONS__
         payload = { raw: text };
       }
       if (!resp.ok) {
-        throw new Error(prettyJson(payload));
+        let detail = "";
+        if (payload && typeof payload === "object") {
+          const rawDetail = payload.detail;
+          if (typeof rawDetail === "string" && rawDetail.trim()) {
+            detail = rawDetail.trim();
+          } else if (rawDetail && typeof rawDetail === "object") {
+            detail = prettyJson(rawDetail);
+          } else if (typeof payload.raw === "string" && payload.raw.trim()) {
+            detail = payload.raw.trim();
+          }
+        }
+        if (!detail) {
+          detail = "request failed";
+        }
+        throw new Error("HTTP " + String(resp.status) + ": " + detail);
       }
       return payload;
     }
@@ -1315,6 +1369,8 @@ __STATE_OPTIONS__
       const rid = validateRunId(seedRunId);
       const noSuffix = "__nooption_baseline";
       const sxSuffix = "__singlex";
+      const noHypSuffix = "__nooption_hypothesis_panel";
+      const sxHypSuffix = "__singlex_hypothesis_panel";
       if (rid.endsWith(noSuffix)) {
         const head = rid.slice(0, -noSuffix.length);
         return { nooption: rid, singlex: head + sxSuffix };
@@ -1322,6 +1378,19 @@ __STATE_OPTIONS__
       if (rid.endsWith(sxSuffix)) {
         const head = rid.slice(0, -sxSuffix.length);
         return { nooption: head + noSuffix, singlex: rid };
+      }
+      if (rid.endsWith(noHypSuffix)) {
+        const head = rid.slice(0, -noHypSuffix.length);
+        return { nooption: rid, singlex: head + sxHypSuffix };
+      }
+      if (rid.endsWith(sxHypSuffix)) {
+        const head = rid.slice(0, -sxHypSuffix.length);
+        return { nooption: head + noHypSuffix, singlex: rid };
+      }
+      const mode = String(byId("mode").value || "").toLowerCase();
+      const preferHypothesis = mode.includes("hypothesis") || rid.toLowerCase().includes("hypothesis");
+      if (preferHypothesis) {
+        return { nooption: rid + noHypSuffix, singlex: rid + sxHypSuffix };
       }
       return { nooption: rid + noSuffix, singlex: rid + sxSuffix };
     }
@@ -1745,8 +1814,15 @@ __STATE_OPTIONS__
       UI_STATE.runsBusy = true;
       try {
         const state = byId("detail_status_filter").value.trim();
-        const query = state ? ("?state=" + encodeURIComponent(state) + "&limit=200") : "?limit=200";
-        const payload = await fetchJson("/runs" + query);
+        const mode = String(byId("list_mode_filter").value || "").trim();
+        const runIdLike = String(byId("list_run_id_filter").value || "").trim();
+        const query = new URLSearchParams();
+        query.set("limit", "200");
+        query.set("include_history", "true");
+        if (state) query.set("state", state);
+        if (mode) query.set("mode", mode);
+        if (runIdLike) query.set("run_id_contains", runIdLike);
+        const payload = await fetchJson("/runs?" + query.toString());
         const rows = payload.rows || [];
 
         const tbody = byId("runs_tbody");
@@ -1802,6 +1878,10 @@ __STATE_OPTIONS__
           retryBtn.dataset.runId = String(row.run_id || "");
           retryBtn.textContent = "retry";
 
+          const stateText = String(row.state || "").toLowerCase();
+          cancelBtn.disabled = stateText === "succeeded" || stateText === "failed" || stateText === "cancelled";
+          retryBtn.disabled = !(stateText === "failed" || stateText === "cancelled");
+
           tdActions.appendChild(inspectBtn);
           tdActions.appendChild(cancelBtn);
           tdActions.appendChild(retryBtn);
@@ -1809,8 +1889,9 @@ __STATE_OPTIONS__
 
           tbody.appendChild(tr);
         }
+        setNotice(byId("runs_notice"), "", "loaded rows: " + String(rows.length));
       } catch (err) {
-        setNotice(byId("submit_notice"), "error", String(err && err.message ? err.message : err));
+        setNotice(byId("runs_notice"), "error", String(err && err.message ? err.message : err));
       } finally {
         UI_STATE.runsBusy = false;
       }
@@ -1859,7 +1940,7 @@ __STATE_OPTIONS__
       try {
         await refreshRuns();
       } catch (err) {
-        setNotice(byId("submit_notice"), "error", String(err && err.message ? err.message : err));
+        setNotice(byId("runs_notice"), "error", String(err && err.message ? err.message : err));
       }
     }
 
@@ -1905,6 +1986,8 @@ __STATE_OPTIONS__
       });
     });
     byId("compare_from_detail_btn").addEventListener("click", compareFromDetailSeed);
+    byId("compare_nooption_run_id").addEventListener("input", updateCompareExportButtons);
+    byId("compare_singlex_run_id").addEventListener("input", updateCompareExportButtons);
     byId("export_compare_md_btn").addEventListener("click", () => {
       try {
         exportCompareMarkdown();
@@ -1926,6 +2009,22 @@ __STATE_OPTIONS__
     });
 
     byId("mode").addEventListener("change", updateModeHelp);
+    byId("detail_status_filter").addEventListener("change", () => {
+      onRefreshRunsClick().catch((err) => {
+        setNotice(byId("runs_notice"), "error", String(err && err.message ? err.message : err));
+      });
+    });
+    byId("list_mode_filter").addEventListener("change", () => {
+      onRefreshRunsClick().catch((err) => {
+        setNotice(byId("runs_notice"), "error", String(err && err.message ? err.message : err));
+      });
+    });
+    byId("list_run_id_filter").addEventListener("keydown", (evt) => {
+      if (evt.key !== "Enter") return;
+      onRefreshRunsClick().catch((err) => {
+        setNotice(byId("runs_notice"), "error", String(err && err.message ? err.message : err));
+      });
+    });
 
     byId("runs_tbody").addEventListener("click", async (evt) => {
       const target = evt.target;
@@ -1939,7 +2038,7 @@ __STATE_OPTIONS__
       try {
         await runAction(action, runId);
       } catch (err) {
-        setNotice(byId("submit_notice"), "error", String(err && err.message ? err.message : err));
+        setNotice(byId("runs_notice"), "error", String(err && err.message ? err.message : err));
       }
     });
 
@@ -1957,7 +2056,7 @@ __STATE_OPTIONS__
     refreshRuns();
     setInterval(() => {
       tickAutoRefresh().catch((err) => {
-        setNotice(byId("submit_notice"), "error", String(err && err.message ? err.message : err));
+        setNotice(byId("runs_notice"), "error", String(err && err.message ? err.message : err));
       });
     }, 4000);
   </script>
@@ -1965,5 +2064,6 @@ __STATE_OPTIONS__
 </html>
         """
         .replace("__MODE_OPTIONS__", mode_options)
+        .replace("__MODE_FILTER_OPTIONS__", mode_filter_options)
         .replace("__STATE_OPTIONS__", state_options)
     )

@@ -309,6 +309,9 @@ def test_api_ui_endpoint_serves_html_console() -> None:
     assert "save_compare_outputs_btn" in resp.text
     assert "export_compare_md_btn" in resp.text
     assert "export_compare_json_btn" in resp.text
+    assert "list_mode_filter" in resp.text
+    assert "list_run_id_filter" in resp.text
+    assert "runs_notice" in resp.text
 
 
 def test_api_review_endpoint_returns_pending_when_no_result() -> None:
@@ -584,3 +587,115 @@ def test_api_compare_export_blocks_promotion_when_any_governance_fails(tmp_path:
     out_md = Path(payload["outputs"]["markdown"])
     assert out_json.is_file()
     assert out_md.is_file()
+
+
+def test_api_compare_export_rejects_mode_mismatch() -> None:
+    orch = RunOrchestrator(engine=_FakeEngine(states=[]))
+    app = create_app(orchestrator=orch)
+    client = TestClient(app)
+
+    create_nooption = client.post(
+        "/runs?execute=false",
+        json={"mode": "singlex_baseline", "run_id": "ut_mode_mismatch_nooption"},
+    )
+    create_singlex = client.post(
+        "/runs?execute=false",
+        json={"mode": "nooption_baseline", "run_id": "ut_mode_mismatch_singlex"},
+    )
+    assert create_nooption.status_code == 202
+    assert create_singlex.status_code == 202
+
+    resp = client.post(
+        "/compare/export",
+        json={
+            "nooption_run_id": "ut_mode_mismatch_nooption",
+            "singlex_run_id": "ut_mode_mismatch_singlex",
+        },
+    )
+    assert resp.status_code == 422
+    assert "mode mismatch" in str(resp.json()["detail"])
+
+
+def test_api_history_scan_supports_listing_and_detail(tmp_path: Path) -> None:
+    class _HistoryEngine:
+        def __init__(self, workspace_root: Path) -> None:
+            self.workspace_root = workspace_root
+
+        def execute(self, request: RunRequestContract, *, dry_run: bool = False) -> EngineExecution:
+            raise RuntimeError("not used in history-only test")
+
+    run_id = "ut_history_singlex_20260224"
+    top_rel = f"outputs/tables/{run_id}_top_inference.csv"
+    rst_rel = f"data/metadata/{run_id}_restart.csv"
+    top_path = tmp_path / top_rel
+    rst_path = tmp_path / rst_rel
+    top_path.parent.mkdir(parents=True, exist_ok=True)
+    rst_path.parent.mkdir(parents=True, exist_ok=True)
+    top_path.write_text(
+        "\n".join(
+            [
+                "candidate_id,candidate_tier,p_boot_validation,q_value_validation,status_validation,track",
+                "c1,validated_candidate,0.02,0.07,ok,primary_strict",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    rst_path.write_text(
+        "\n".join(
+            [
+                "candidate_id,validated_rate,support_or_better_rate",
+                "c1,0.75,1.0",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    summary_path = (
+        tmp_path
+        / "data"
+        / "metadata"
+        / "phase_b_bikard_machine_scientist_run_summary_ut_history_singlex_20260224.json"
+    )
+    summary_path.parent.mkdir(parents=True, exist_ok=True)
+    summary_path.write_text(
+        "\n".join(
+            [
+                "{",
+                f'  "run_id": "{run_id}",',
+                '  "timestamp": "2026-02-24T03:00:00Z",',
+                '  "counts": {"top_rows_inference": 1, "scan_rows": 10},',
+                '  "search_governance": {"validation_used_for_search": false, "candidate_pool_locked_pre_validation": true},',
+                '  "track_consensus_meta": {"enforce_track_consensus": true, "n_rows_demoted_from_validated": 0},',
+                '  "outputs": {',
+                f'    "top_models_inference_csv": "{top_rel}",',
+                f'    "restart_stability_csv": "{rst_rel}",',
+                f'    "run_summary_json": "{summary_path}"',
+                "  }",
+                "}",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    orch = RunOrchestrator(engine=_HistoryEngine(workspace_root=tmp_path))
+    app = create_app(orchestrator=orch)
+    client = TestClient(app)
+
+    listed = client.get("/runs?include_history=true&mode=singlex_baseline&run_id_contains=ut_history")
+    assert listed.status_code == 200
+    rows = listed.json()["rows"]
+    assert any(str(row.get("run_id")) == run_id for row in rows)
+
+    status_resp = client.get(f"/runs/{run_id}")
+    assert status_resp.status_code == 200
+    assert status_resp.json()["status"]["state"] == "succeeded"
+    assert status_resp.json()["source"] == "run_summary"
+
+    review_resp = client.get(f"/runs/{run_id}/review")
+    assert review_resp.status_code == 200
+    review = review_resp.json()["review"]
+    assert review["metrics"]["validated_candidate_count"] == 1
+    assert review["metrics"]["best_p_validation"] == 0.02

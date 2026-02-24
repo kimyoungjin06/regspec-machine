@@ -10,9 +10,16 @@ from datetime import datetime, timezone
 import json
 from pathlib import Path
 import re
-from typing import Any, Dict, Mapping, Optional
+import time
+from typing import Any, Dict, List, Mapping, Optional
 
-from .contracts import RUN_MODES, RunRequestContract
+from .contracts import (
+    RUN_MODES,
+    RunArtifactsContract,
+    RunRequestContract,
+    RunResultContract,
+    RunStatusContract,
+)
 from .engine import PresetEngine
 from .orchestrator import RunOrchestrator
 from .ui_page import build_ui_page_html
@@ -96,6 +103,215 @@ def _slug(text: str) -> str:
     cleaned = re.sub(r"[^a-zA-Z0-9._-]+", "_", str(text).strip())
     cleaned = re.sub(r"_+", "_", cleaned).strip("_")
     return cleaned or "run"
+
+
+def _is_nooption_mode(mode: str) -> bool:
+    text = str(mode or "").strip().lower()
+    return text in {"nooption", "nooption_baseline", "nooption_hypothesis_panel"}
+
+
+def _is_singlex_mode(mode: str) -> bool:
+    text = str(mode or "").strip().lower()
+    return text in {"singlex", "singlex_baseline", "singlex_hypothesis_panel"}
+
+
+def _infer_mode_from_run_id(run_id: str) -> str:
+    rid = str(run_id or "").strip().lower()
+    if rid.endswith("__singlex_hypothesis_panel") or "singlex_hypothesis_panel" in rid:
+        return "singlex_hypothesis_panel"
+    if rid.endswith("__nooption_hypothesis_panel") or "nooption_hypothesis_panel" in rid:
+        return "nooption_hypothesis_panel"
+    if rid.endswith("__singlex") or "singlex" in rid:
+        return "singlex_baseline"
+    if rid.endswith("__nooption_baseline") or "nooption" in rid:
+        return "nooption_baseline"
+    if "openexplore_autorefine" in rid:
+        return "openexplore_autorefine"
+    if "openexplore" in rid:
+        return "openexplore"
+    return "nooption_baseline"
+
+
+def _infer_state(value: Any) -> str:
+    text = str(value or "").strip().lower()
+    if text in {"queued", "running", "succeeded", "failed", "cancelled"}:
+        return text
+    if text in {"ok", "success", "passed", "done"}:
+        return "succeeded"
+    if text in {"partial_failure", "error", "failed_exception"}:
+        return "failed"
+    if text in {"canceled"}:
+        return "cancelled"
+    return "succeeded"
+
+
+def _extract_timestamp(payload: Mapping[str, Any]) -> str:
+    for key in ("timestamp_utc_finished", "timestamp_utc", "timestamp", "generated_at_utc"):
+        text = str(payload.get(key, "")).strip()
+        if text:
+            return text
+    return _utc_now_isoz()
+
+
+def _extract_int_counts(counts: Any) -> Dict[str, int]:
+    if not isinstance(counts, Mapping):
+        return {}
+    out: Dict[str, int] = {}
+    for key, value in counts.items():
+        if isinstance(value, bool):
+            continue
+        try:
+            n = int(value)
+        except Exception:
+            continue
+        if n < 0:
+            continue
+        out[str(key)] = n
+    return out
+
+
+def _extract_governance_checks(payload: Mapping[str, Any]) -> Dict[str, Any]:
+    out: Dict[str, Any] = {}
+    search_governance = payload.get("search_governance")
+    if isinstance(search_governance, Mapping):
+        out["search_governance"] = dict(search_governance)
+    else:
+        validation_used_for_search = payload.get("validation_used_for_search")
+        candidate_pool_locked = payload.get("candidate_pool_locked_pre_validation")
+        if validation_used_for_search is not None or candidate_pool_locked is not None:
+            out["search_governance"] = {
+                "validation_used_for_search": validation_used_for_search,
+                "candidate_pool_locked_pre_validation": candidate_pool_locked,
+            }
+
+    track_consensus_meta = payload.get("track_consensus_meta")
+    if isinstance(track_consensus_meta, Mapping):
+        out["track_consensus_meta"] = dict(track_consensus_meta)
+
+    direction_review_checks = payload.get("direction_review_checks")
+    if isinstance(direction_review_checks, Mapping):
+        out.update({str(k): v for k, v in direction_review_checks.items()})
+
+    checks = payload.get("checks")
+    if isinstance(checks, Mapping):
+        out.update({str(k): v for k, v in checks.items()})
+
+    return out
+
+
+def _extract_artifacts(
+    *,
+    payload: Mapping[str, Any],
+    source_path: Path,
+    source_kind: str,
+) -> Dict[str, str]:
+    allowed = set(RunArtifactsContract().as_dict().keys())
+    out: Dict[str, str] = {}
+    outputs = payload.get("outputs")
+    if isinstance(outputs, Mapping):
+        for key in allowed:
+            text = str(outputs.get(key, "")).strip()
+            if text:
+                out[key] = text
+
+    if source_kind == "run_summary":
+        out.setdefault("run_summary_json", str(source_path))
+    if source_kind == "paired_summary":
+        out.setdefault("paired_summary_json", str(source_path))
+        direction_review_json = str(payload.get("direction_review_json", "")).strip()
+        if direction_review_json:
+            out["direction_review_json"] = direction_review_json
+
+    return out
+
+
+def _history_entry_from_payload(
+    *,
+    payload: Mapping[str, Any],
+    source_path: Path,
+    source_kind: str,
+) -> Optional[Dict[str, Any]]:
+    run_id = str(payload.get("run_id", "")).strip()
+    if not run_id:
+        return None
+
+    mode_text = str(payload.get("mode", "")).strip()
+    mode = mode_text if mode_text in RUN_MODES else _infer_mode_from_run_id(run_id)
+    if mode not in RUN_MODES:
+        return None
+
+    state = _infer_state(payload.get("status"))
+    timestamp = _extract_timestamp(payload)
+    counts = _extract_int_counts(payload.get("counts"))
+    governance_checks = _extract_governance_checks(payload)
+
+    try:
+        audit_hashes_raw = payload.get("audit_hashes")
+        audit_hashes = dict(audit_hashes_raw) if isinstance(audit_hashes_raw, Mapping) else {}
+        artifacts = RunArtifactsContract(
+            **_extract_artifacts(payload=payload, source_path=source_path, source_kind=source_kind)
+        )
+        result = RunResultContract.create(
+            run_id=run_id,
+            mode=mode,
+            state=state,
+            artifacts=artifacts,
+            counts=counts,
+            governance_checks=governance_checks,
+            audit_hashes=audit_hashes,
+            timestamp_utc=timestamp,
+        )
+        status = RunStatusContract.create(
+            run_id=run_id,
+            mode=mode,
+            state=state,
+            created_at_utc=timestamp,
+            updated_at_utc=timestamp,
+            progress_stage="restored",
+            progress_message=f"restored from {source_kind}",
+            progress_fraction=1.0,
+        )
+        request = RunRequestContract.from_payload({"mode": mode, "run_id": run_id})
+    except Exception:
+        return None
+    return {
+        "request": request,
+        "status": status,
+        "result": result,
+        "source_kind": source_kind,
+    }
+
+
+def _scan_history_entries(*, workspace_root: Path) -> Dict[str, Dict[str, Any]]:
+    meta_root = workspace_root / "data" / "metadata"
+    if not meta_root.is_dir():
+        return {}
+
+    rows: Dict[str, Dict[str, Any]] = {}
+    file_specs = [
+        ("run_summary", "phase_b_bikard_machine_scientist_run_summary_*.json"),
+        ("paired_summary", "phase_b_bikard_machine_scientist_paired_preset_summary_*.json"),
+    ]
+    for source_kind, pattern in file_specs:
+        for path in sorted(meta_root.glob(pattern)):
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            if not isinstance(payload, Mapping):
+                continue
+            entry = _history_entry_from_payload(
+                payload=payload,
+                source_path=path.resolve(),
+                source_kind=source_kind,
+            )
+            if entry is None:
+                continue
+            run_id = str(entry["request"].run_id)
+            prev = rows.get(run_id)
+            if prev is None or str(entry["status"].updated_at_utc) >= str(prev["status"].updated_at_utc):
+                rows[run_id] = entry
+    return rows
 
 
 def _extract_review_metrics(*, workspace_root: Path, artifacts: Mapping[str, str]) -> Dict[str, Any]:
@@ -429,6 +645,68 @@ def create_app(
             return Path.cwd().resolve()
         return Path(root).resolve()
 
+    history_cache: Dict[str, Any] = {
+        "loaded_at_monotonic": 0.0,
+        "rows": {},
+    }
+
+    def _load_history_rows(*, force: bool = False) -> Dict[str, Dict[str, Any]]:
+        now = time.monotonic()
+        if not force and (now - float(history_cache["loaded_at_monotonic"])) <= 5.0:
+            return dict(history_cache["rows"])
+        rows = _scan_history_entries(workspace_root=_workspace_root())
+        history_cache["rows"] = rows
+        history_cache["loaded_at_monotonic"] = now
+        return dict(rows)
+
+    def _resolve_run_entry(run_id: str) -> Optional[Dict[str, Any]]:
+        status = orch.get_status(run_id)
+        if status is not None:
+            result = orch.get_result(run_id)
+            mode = str(status.mode)
+            try:
+                request = RunRequestContract.from_payload({"mode": mode, "run_id": str(run_id)})
+            except Exception:
+                request = RunRequestContract.from_payload(
+                    {"mode": _infer_mode_from_run_id(run_id), "run_id": str(run_id)}
+                )
+            return {
+                "request": request,
+                "status": status,
+                "result": result,
+                "source_kind": "live",
+            }
+        rows = _load_history_rows()
+        entry = rows.get(str(run_id))
+        if entry is not None:
+            return entry
+        rows = _load_history_rows(force=True)
+        return rows.get(str(run_id))
+
+    def _entry_to_list_row(entry: Mapping[str, Any]) -> Dict[str, Any]:
+        request = entry.get("request")
+        status = entry.get("status")
+        result = entry.get("result")
+        returncode = entry.get("returncode")
+        if request is None or status is None:
+            raise ValueError("invalid run entry: request/status missing")
+        result_counts = result.counts if result is not None else {}
+        return {
+            "run_id": request.run_id,
+            "mode": request.mode,
+            "state": status.state,
+            "attempt": int(status.attempt),
+            "created_at_utc": status.created_at_utc,
+            "updated_at_utc": status.updated_at_utc,
+            "progress_stage": status.progress_stage,
+            "progress_message": status.progress_message,
+            "progress_fraction": status.progress_fraction,
+            "returncode": returncode,
+            "has_result": result is not None,
+            "counts": result_counts,
+            "source": str(entry.get("source_kind", "live")),
+        }
+
     app = FastAPI(
         title="regspec-machine API",
         version="0.1.0",
@@ -438,46 +716,84 @@ def create_app(
 
     @app.get("/healthz")
     def healthz() -> Dict[str, Any]:
+        live_count = len(orch.list_snapshots())
+        history_count = len(_load_history_rows())
         return {
             "ok": True,
             "timestamp_utc": _utc_now_isoz(),
-            "run_count": len(orch.list_snapshots()),
+            "run_count": int(live_count),
+            "history_run_count": int(history_count),
         }
 
     @app.get("/runs")
     def list_runs(
         state: str = Query(default=""),
+        mode: str = Query(default=""),
+        run_id_contains: str = Query(default=""),
+        include_history: bool = Query(default=True),
+        offset: int = Query(default=0, ge=0),
         limit: int = Query(default=200, ge=1, le=1000),
     ) -> Dict[str, Any]:
-        rows = orch.list_snapshots(state=state)
-        rows_sorted = sorted(
-            rows,
-            key=lambda row: str(row.status.updated_at_utc),
-            reverse=True,
-        )
-        payload_rows = []
-        for row in rows_sorted[: int(limit)]:
-            result_counts = row.result.counts if row.result is not None else {}
-            payload_rows.append(
+        state_filter = str(state).strip().lower()
+        mode_filter = str(mode).strip().lower()
+        run_like_filter = str(run_id_contains).strip().lower()
+        seen_run_ids = set()
+        payload_rows: List[Dict[str, Any]] = []
+
+        live_rows = orch.list_snapshots(state="")
+        for row in live_rows:
+            item = _entry_to_list_row(
                 {
-                    "run_id": row.request.run_id,
-                    "mode": row.request.mode,
-                    "state": row.status.state,
-                    "attempt": int(row.status.attempt),
-                    "created_at_utc": row.status.created_at_utc,
-                    "updated_at_utc": row.status.updated_at_utc,
-                    "progress_stage": row.status.progress_stage,
-                    "progress_message": row.status.progress_message,
-                    "progress_fraction": row.status.progress_fraction,
+                    "request": row.request,
+                    "status": row.status,
+                    "result": row.result,
                     "returncode": row.returncode,
-                    "has_result": row.result is not None,
-                    "counts": result_counts,
+                    "source_kind": "live",
                 }
             )
+            payload_rows.append(item)
+            seen_run_ids.add(str(item["run_id"]))
+
+        if include_history:
+            for entry in _load_history_rows().values():
+                row = _entry_to_list_row(entry)
+                run_id_text = str(row["run_id"])
+                if run_id_text in seen_run_ids:
+                    continue
+                payload_rows.append(row)
+                seen_run_ids.add(run_id_text)
+
+        filtered_rows: List[Dict[str, Any]] = []
+        for row in payload_rows:
+            row_state = str(row.get("state", "")).strip().lower()
+            row_mode = str(row.get("mode", "")).strip().lower()
+            row_run_id = str(row.get("run_id", "")).strip().lower()
+            if state_filter and row_state != state_filter:
+                continue
+            if mode_filter and row_mode != mode_filter:
+                continue
+            if run_like_filter and run_like_filter not in row_run_id:
+                continue
+            filtered_rows.append(row)
+
+        rows_sorted = sorted(
+            filtered_rows,
+            key=lambda row: str(row.get("updated_at_utc", "")),
+            reverse=True,
+        )
+        begin = int(offset)
+        end = begin + int(limit)
+        page_rows = rows_sorted[begin:end]
         return {
-            "state_filter": str(state).strip(),
-            "rows": payload_rows,
-            "total_rows": len(payload_rows),
+            "state_filter": state_filter,
+            "mode_filter": mode_filter,
+            "run_id_contains_filter": run_like_filter,
+            "include_history": bool(include_history),
+            "offset": int(offset),
+            "limit": int(limit),
+            "rows": page_rows,
+            "total_rows": len(page_rows),
+            "total_available": len(rows_sorted),
             "allowed_modes": list(RUN_MODES),
         }
 
@@ -515,40 +831,49 @@ def create_app(
 
     @app.get("/runs/{run_id}")
     def get_run_status(run_id: str) -> Dict[str, Any]:
-        status = orch.get_status(run_id)
-        if status is None:
+        entry = _resolve_run_entry(run_id)
+        if entry is None:
             raise HTTPException(status_code=404, detail=f"run not found: {run_id}")
-        return {"status": status.as_dict()}
+        status = entry["status"]
+        return {"status": status.as_dict(), "source": str(entry.get("source_kind", "live"))}
 
     @app.get("/runs/{run_id}/result")
     def get_run_result(run_id: str) -> Any:
-        status = orch.get_status(run_id)
-        if status is None:
+        entry = _resolve_run_entry(run_id)
+        if entry is None:
             raise HTTPException(status_code=404, detail=f"run not found: {run_id}")
-        result = orch.get_result(run_id)
+        status = entry["status"]
+        result = entry["result"]
         if result is None:
             return JSONResponse(
                 status_code=202,
                 content={
                     "status": status.as_dict(),
                     "result": None,
+                    "source": str(entry.get("source_kind", "live")),
                 },
             )
         return {
             "status": status.as_dict(),
             "result": result.as_dict(),
+            "source": str(entry.get("source_kind", "live")),
         }
 
     @app.get("/runs/{run_id}/summary")
     def get_run_summary(run_id: str) -> Any:
-        status = orch.get_status(run_id)
-        if status is None:
+        entry = _resolve_run_entry(run_id)
+        if entry is None:
             raise HTTPException(status_code=404, detail=f"run not found: {run_id}")
-        result = orch.get_result(run_id)
+        status = entry["status"]
+        result = entry["result"]
         if result is None:
             return JSONResponse(
                 status_code=202,
-                content={"status": status.as_dict(), "summary": None},
+                content={
+                    "status": status.as_dict(),
+                    "summary": None,
+                    "source": str(entry.get("source_kind", "live")),
+                },
             )
         return {
             "status": status.as_dict(),
@@ -561,18 +886,24 @@ def create_app(
                 "audit_hashes": result.audit_hashes,
                 "timestamp_utc": result.timestamp_utc,
             },
+            "source": str(entry.get("source_kind", "live")),
         }
 
     @app.get("/runs/{run_id}/review")
     def get_run_review(run_id: str) -> Any:
-        status = orch.get_status(run_id)
-        if status is None:
+        entry = _resolve_run_entry(run_id)
+        if entry is None:
             raise HTTPException(status_code=404, detail=f"run not found: {run_id}")
-        result = orch.get_result(run_id)
+        status = entry["status"]
+        result = entry["result"]
         if result is None:
             return JSONResponse(
                 status_code=202,
-                content={"status": status.as_dict(), "review": None},
+                content={
+                    "status": status.as_dict(),
+                    "review": None,
+                    "source": str(entry.get("source_kind", "live")),
+                },
             )
         result_payload = result.as_dict()
         review = _build_review_payload(
@@ -582,6 +913,7 @@ def create_app(
         return {
             "status": status.as_dict(),
             "review": review,
+            "source": str(entry.get("source_kind", "live")),
         }
 
     @app.post("/compare/export")
@@ -594,17 +926,30 @@ def create_app(
                 detail="nooption_run_id and singlex_run_id are required",
             )
 
-        nooption_status = orch.get_status(nooption_run_id)
-        if nooption_status is None:
+        nooption_entry = _resolve_run_entry(nooption_run_id)
+        if nooption_entry is None:
             raise HTTPException(status_code=404, detail=f"run not found: {nooption_run_id}")
-        singlex_status = orch.get_status(singlex_run_id)
-        if singlex_status is None:
+        singlex_entry = _resolve_run_entry(singlex_run_id)
+        if singlex_entry is None:
             raise HTTPException(status_code=404, detail=f"run not found: {singlex_run_id}")
 
-        nooption_result = orch.get_result(nooption_run_id)
+        nooption_status = nooption_entry["status"]
+        singlex_status = singlex_entry["status"]
+        if not _is_nooption_mode(nooption_status.mode):
+            raise HTTPException(
+                status_code=422,
+                detail=f"nooption_run_id mode mismatch: expected nooption*, got {nooption_status.mode}",
+            )
+        if not _is_singlex_mode(singlex_status.mode):
+            raise HTTPException(
+                status_code=422,
+                detail=f"singlex_run_id mode mismatch: expected singlex*, got {singlex_status.mode}",
+            )
+
+        nooption_result = nooption_entry["result"]
         if nooption_result is None:
             raise HTTPException(status_code=409, detail=f"run result not ready: {nooption_run_id}")
-        singlex_result = orch.get_result(singlex_run_id)
+        singlex_result = singlex_entry["result"]
         if singlex_result is None:
             raise HTTPException(status_code=409, detail=f"run result not ready: {singlex_run_id}")
 
@@ -627,6 +972,10 @@ def create_app(
             "singlex_run_id": singlex_run_id,
             "comparison": compare_payload,
             "outputs": files,
+            "sources": {
+                "nooption": str(nooption_entry.get("source_kind", "live")),
+                "singlex": str(singlex_entry.get("source_kind", "live")),
+            },
         }
 
     @app.post("/runs/{run_id}/cancel")
@@ -655,14 +1004,19 @@ def create_app(
 
     @app.get("/runs/{run_id}/artifacts")
     def get_artifacts(run_id: str) -> Any:
-        status = orch.get_status(run_id)
-        if status is None:
+        entry = _resolve_run_entry(run_id)
+        if entry is None:
             raise HTTPException(status_code=404, detail=f"run not found: {run_id}")
-        result = orch.get_result(run_id)
+        status = entry["status"]
+        result = entry["result"]
         if result is None:
             return JSONResponse(
                 status_code=202,
-                content={"status": status.as_dict(), "artifacts": None},
+                content={
+                    "status": status.as_dict(),
+                    "artifacts": None,
+                    "source": str(entry.get("source_kind", "live")),
+                },
             )
 
         artifact_map = result.artifacts.as_dict()
@@ -675,6 +1029,7 @@ def create_app(
             "artifacts": artifact_map,
             "resolved_artifacts": resolved_map,
             "artifact_exists": existing_map,
+            "source": str(entry.get("source_kind", "live")),
         }
 
     @app.get("/ui", response_class=HTMLResponse)
