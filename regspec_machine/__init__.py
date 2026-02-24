@@ -20,6 +20,15 @@ from .contracts import (
     RunStatusContract,
 )
 from .api import create_app
+from .bundle import (
+    BundleBuildResult,
+    DesktopBundleConfig,
+    build_bundle_parser,
+    build_pyinstaller_command,
+    parse_bundle_args,
+    resolve_bundle_executable,
+    run_bundle_build,
+)
 from .desktop import DesktopLaunchConfig, build_desktop_parser, parse_desktop_args
 from .engine import CommandResult, EngineExecution, PresetEngine
 from .feature_registry import build_feature_registry, load_feature_registry
@@ -35,6 +44,13 @@ __all__ = [
     "EngineExecution",
     "NONCONFIRMATORY_MAX_TIERS",
     "create_app",
+    "BundleBuildResult",
+    "DesktopBundleConfig",
+    "build_bundle_parser",
+    "build_pyinstaller_command",
+    "parse_bundle_args",
+    "resolve_bundle_executable",
+    "run_bundle_build",
     "DesktopLaunchConfig",
     "build_desktop_parser",
     "parse_desktop_args",

@@ -28,10 +28,14 @@ api = [
 desktop = [
   "pywebview>=4.4",
 ]
+build = [
+  "pyinstaller>=6.0",
+]
 
 [project.scripts]
 regspec-console = "regspec_machine.launcher:main"
 regspec-desktop = "regspec_machine.desktop:main"
+regspec-build-desktop = "regspec_machine.bundle:main"
 
 [tool.setuptools.packages.find]
 include = ["regspec_machine*"]

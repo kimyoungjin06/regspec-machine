@@ -9,6 +9,7 @@
 
 - Script: `regspec-desktop`
 - Module fallback: `python -m regspec_machine.desktop`
+- Build script: `regspec-build-desktop` (PyInstaller automation)
 
 ## Startup flow
 
@@ -23,3 +24,23 @@
 - Keeps existing L1~L5 contracts unchanged.
 - Avoids immediate heavy Electron/Tauri integration cost.
 - Gives non-CLI users an app-like entry while preserving API testability.
+
+## Build Automation
+
+Install build dependency:
+
+```bash
+python -m pip install -e .[build]
+```
+
+Build:
+
+```bash
+regspec-build-desktop --project-root /path/to/regspec-machine
+```
+
+Options:
+- `--onefile`
+- `--windowed`
+- `--no-smoke-check`
+- `--manifest-json /custom/path/manifest.json`

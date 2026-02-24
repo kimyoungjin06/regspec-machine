@@ -215,6 +215,22 @@ Useful options:
 - `--width 1400 --height 900`
 - `--host 127.0.0.1 --port 8000`
 
+Build desktop executable (PyInstaller):
+
+```bash
+python -m pip install -e .[build]
+regspec-build-desktop --project-root /path/to/regspec-machine
+```
+
+One-file windowed build:
+
+```bash
+regspec-build-desktop --project-root /path/to/regspec-machine --onefile --windowed
+```
+
+Bundle manifest is written by default to:
+- `build/dist/regspec-desktop_bundle_manifest.json`
+
 `load_and_prepare_data()` maps outcomes as:
 - `y_all` from `reference_dik`
 - `y_evidence` from `reference_dik_evidence_use`
