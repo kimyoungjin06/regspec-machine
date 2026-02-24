@@ -81,7 +81,7 @@ def parse_bundle_args(argv: Optional[Sequence[str]] = None) -> DesktopBundleConf
 
 
 def _desktop_script_path(project_root: Path) -> Path:
-    return (project_root / "regspec_machine" / "desktop.py").resolve()
+    return (project_root / "regspec_machine" / "desktop_entry.py").resolve()
 
 
 def build_pyinstaller_command(config: DesktopBundleConfig) -> Tuple[str, ...]:
@@ -219,4 +219,3 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

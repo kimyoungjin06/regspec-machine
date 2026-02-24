@@ -16,9 +16,15 @@ from regspec_machine.bundle import (
 
 def _mk_project(tmp_path: Path) -> Path:
     root = tmp_path / "proj"
-    desktop = root / "regspec_machine" / "desktop.py"
-    desktop.parent.mkdir(parents=True, exist_ok=True)
-    desktop.write_text("print('desktop')\n", encoding="utf-8")
+    pkg_dir = root / "regspec_machine"
+    desktop = pkg_dir / "desktop.py"
+    desktop_entry = pkg_dir / "desktop_entry.py"
+    pkg_dir.mkdir(parents=True, exist_ok=True)
+    desktop.write_text("def main():\n    return 0\n", encoding="utf-8")
+    desktop_entry.write_text(
+        "from regspec_machine.desktop import main\nif __name__ == '__main__':\n    raise SystemExit(main())\n",
+        encoding="utf-8",
+    )
     return root
 
 
@@ -53,7 +59,7 @@ def test_build_pyinstaller_command_contains_expected_flags(tmp_path: Path) -> No
     assert "--windowed" in cmd
     assert "--clean" in cmd
     assert "--collect-all" in cmd and "regspec_machine" in cmd
-    assert str(root / "regspec_machine" / "desktop.py") in cmd
+    assert str(root / "regspec_machine" / "desktop_entry.py") in cmd
 
 
 def test_resolve_bundle_executable_paths(tmp_path: Path) -> None:
@@ -117,4 +123,3 @@ def test_run_bundle_build_requires_pyinstaller(tmp_path: Path, monkeypatch: pyte
     monkeypatch.setattr("regspec_machine.bundle.importlib.util.find_spec", lambda _name: None)
     with pytest.raises(RuntimeError, match="PyInstaller is not installed"):
         run_bundle_build(cfg, runner=lambda _cmd, _cwd: types.SimpleNamespace(returncode=0, stdout="", stderr=""))
-
