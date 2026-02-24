@@ -7,6 +7,24 @@ from typing import Any, Dict, List, Optional, Tuple
 import pandas as pd
 from pandas import CategoricalDtype
 
+_TECHNICAL_NAME_TOKENS = (
+    "run_id",
+    "candidate_id",
+    "bootstrap_seed",
+    "seed",
+    "hash",
+    "signature",
+    "timestamp",
+    "created_at",
+    "updated_at",
+    "returncode",
+    "stdout",
+    "stderr",
+    "command",
+    "artifact",
+    "cli_summary",
+)
+
 
 def _safe_float(value: Any) -> Optional[float]:
     try:
@@ -26,6 +44,18 @@ def _is_id_like(*, col_name: str, unique_share: float) -> bool:
         return True
     if text.endswith("_id") or text.startswith("id_"):
         return True
+    return False
+
+
+def _is_technical_column(col_name: str) -> bool:
+    text = str(col_name).strip().lower()
+    if not text:
+        return False
+    if text.endswith("_path"):
+        return True
+    for token in _TECHNICAL_NAME_TOKENS:
+        if token in text:
+            return True
     return False
 
 
@@ -108,18 +138,21 @@ def _build_column_profile(
 def _select_y_candidates(columns: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     rows: List[Dict[str, Any]] = []
     for col in columns:
+        col_name = str(col.get("name"))
+        if _is_technical_column(col_name):
+            continue
         nonmissing_share = float(col.get("nonmissing_share") or 0.0)
         if nonmissing_share < 0.60:
             continue
         unique_share = float(col.get("unique_share") or 0.0)
-        if _is_id_like(col_name=str(col.get("name")), unique_share=unique_share):
+        if _is_id_like(col_name=col_name, unique_share=unique_share):
             continue
 
         dtype_group = str(col.get("dtype_group", ""))
         if dtype_group in {"numeric", "bool"} and bool(col.get("is_binary_numeric")):
             rows.append(
                 {
-                    "name": str(col.get("name")),
+                    "name": col_name,
                     "y_type": "binary",
                     "nonmissing_share": nonmissing_share,
                     "unique_count": int(col.get("unique_count") or 0),
@@ -132,7 +165,7 @@ def _select_y_candidates(columns: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             if unique_count >= 4:
                 rows.append(
                     {
-                        "name": str(col.get("name")),
+                        "name": col_name,
                         "y_type": "count",
                         "nonmissing_share": nonmissing_share,
                         "unique_count": unique_count,
@@ -145,7 +178,7 @@ def _select_y_candidates(columns: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             if std is not None and std > 0:
                 rows.append(
                     {
-                        "name": str(col.get("name")),
+                        "name": col_name,
                         "y_type": "continuous",
                         "nonmissing_share": nonmissing_share,
                         "unique_count": int(col.get("unique_count") or 0),
@@ -160,6 +193,8 @@ def _select_x_candidates(columns: List[Dict[str, Any]], *, n_rows: int) -> List[
     rows: List[Dict[str, Any]] = []
     for col in columns:
         name = str(col.get("name", ""))
+        if _is_technical_column(name):
+            continue
         nonmissing_share = float(col.get("nonmissing_share") or 0.0)
         if nonmissing_share < 0.60:
             continue
@@ -254,7 +289,9 @@ def _pair_score(
 
     pair = pd.DataFrame({"y": yv, "x": xv}).dropna()
     n = int(len(pair))
-    if n < 30:
+    n_total = int(len(df))
+    min_support = min(30, max(12, int(n_total * 0.50)))
+    if n < min_support:
         return None
 
     score = None
@@ -318,12 +355,15 @@ def _build_question_seeds(
 ) -> List[Dict[str, Any]]:
     rows: List[Dict[str, Any]] = []
     y_pool = y_candidates[:8]
+    y_name_set = {str(y.get("name", "")).strip() for y in y_pool}
     x_pool = x_candidates[:24]
     for y in y_pool:
         y_col = str(y["name"])
         y_type = str(y["y_type"])
         for x in x_pool:
             x_col = str(x["name"])
+            if x_col in y_name_set:
+                continue
             x_type = str(x["x_type"])
             score_row = _pair_score(df=df, y_col=y_col, y_type=y_type, x_col=x_col, x_type=x_type)
             if score_row is None:
