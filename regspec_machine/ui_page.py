@@ -717,6 +717,25 @@ __MODE_FILTER_OPTIONS__
           <input id="dataset_top_n" type="number" min="1" max="100" step="1" value="20" />
         </div>
         <div>
+          <label for="dataset_research_mode">research mode (leakage-safe filtering)</label>
+          <div class="inline">
+            <input id="dataset_research_mode" type="checkbox" checked />
+            <span style="font-size: 12px; color: var(--muted);">on (recommended)</span>
+          </div>
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label for="dataset_fixed_y">fixed Y (optional)</label>
+          <input id="dataset_fixed_y" placeholder="e.g. policy_cited_5y" />
+        </div>
+        <div>
+          <label for="dataset_exclude_x_cols">exclude X columns (comma separated)</label>
+          <input id="dataset_exclude_x_cols" placeholder="e.g. policy_cite_count_5y, q_value_validation" />
+        </div>
+      </div>
+      <div class="row">
+        <div>
           <label>profile status</label>
           <div id="profile_notice" class="notice">ready</div>
         </div>
@@ -749,6 +768,7 @@ __MODE_FILTER_OPTIONS__
               <th>question</th>
               <th>score</th>
               <th>support_rows</th>
+              <th>risk</th>
               <th>signal</th>
             </tr>
           </thead>
@@ -1418,7 +1438,7 @@ __MODE_FILTER_OPTIONS__
       if (!data.length) {
         const tr = document.createElement("tr");
         const td = document.createElement("td");
-        td.colSpan = 5;
+        td.colSpan = 6;
         td.textContent = "No question seeds found.";
         tr.appendChild(td);
         tbody.appendChild(tr);
@@ -1443,6 +1463,12 @@ __MODE_FILTER_OPTIONS__
         tdSupport.textContent = String(row.support_rows === undefined ? "-" : row.support_rows);
         tr.appendChild(tdSupport);
 
+        const tdRisk = document.createElement("td");
+        const level = String(row.risk_level || "low");
+        const flags = Array.isArray(row.risk_flags) ? row.risk_flags : [];
+        tdRisk.textContent = flags.length ? (level + " [" + flags.join(", ") + "]") : level;
+        tr.appendChild(tdRisk);
+
         const tdSignal = document.createElement("td");
         tdSignal.textContent = String(row.signal_summary || "-");
         tr.appendChild(tdSignal);
@@ -1460,6 +1486,13 @@ __MODE_FILTER_OPTIONS__
       appendOverviewRow(tbody, "artifact_key", payload.artifact_key || "-");
       appendOverviewRow(tbody, "rows (sampled)", fmt(payload.row_count));
       appendOverviewRow(tbody, "columns", fmt(payload.column_count));
+      appendOverviewRow(tbody, "research_mode", payload.research_mode ? "on" : "off");
+      appendOverviewRow(tbody, "fixed_y", payload.fixed_y || "-");
+      appendOverviewRow(
+        tbody,
+        "exclude_x_cols",
+        Array.isArray(payload.exclude_x_cols) ? payload.exclude_x_cols.join(", ") || "-" : "-"
+      );
       appendOverviewRow(tbody, "y candidates", fmt(Array.isArray(payload.y_candidates) ? payload.y_candidates.length : 0));
       appendOverviewRow(tbody, "x candidates", fmt(Array.isArray(payload.x_candidates) ? payload.x_candidates.length : 0));
       appendOverviewRow(
@@ -1480,11 +1513,17 @@ __MODE_FILTER_OPTIONS__
         const runId = String(byId("dataset_run_id").value || "").trim();
         const datasetPath = String(byId("dataset_path").value || "").trim();
         const artifactKey = String(byId("dataset_artifact_key").value || "auto").trim();
+        const researchMode = byId("dataset_research_mode").checked;
+        const fixedY = String(byId("dataset_fixed_y").value || "").trim();
+        const excludeX = String(byId("dataset_exclude_x_cols").value || "").trim();
         if (runId) params.set("run_id", validateRunId(runId));
         if (datasetPath) params.set("dataset_path", datasetPath);
         if (artifactKey) params.set("artifact_key", artifactKey);
         params.set("sample_rows", String(sampleRows));
         params.set("top_n", String(topN));
+        params.set("research_mode", researchMode ? "true" : "false");
+        if (fixedY) params.set("fixed_y", fixedY);
+        if (excludeX) params.set("exclude_x_cols", excludeX);
 
         setProfileBusy(true);
         setNotice(notice, "", "profiling dataset...");
@@ -1514,6 +1553,13 @@ __MODE_FILTER_OPTIONS__
         if (payload.run_id && !String(byId("dataset_run_id").value || "").trim()) {
           byId("dataset_run_id").value = String(payload.run_id);
         }
+        if (payload.fixed_y) {
+          byId("dataset_fixed_y").value = String(payload.fixed_y);
+        }
+        if (Array.isArray(payload.exclude_x_cols)) {
+          byId("dataset_exclude_x_cols").value = payload.exclude_x_cols.join(", ");
+        }
+        byId("dataset_research_mode").checked = Boolean(payload.research_mode);
         setNotice(
           notice,
           "ok",

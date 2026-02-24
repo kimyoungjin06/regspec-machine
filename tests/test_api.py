@@ -317,6 +317,9 @@ def test_api_ui_endpoint_serves_html_console() -> None:
     assert "dataset_path" in resp.text
     assert "profile_btn" in resp.text
     assert "profile_seed_tbody" in resp.text
+    assert "dataset_research_mode" in resp.text
+    assert "dataset_fixed_y" in resp.text
+    assert "dataset_exclude_x_cols" in resp.text
 
 
 def test_api_review_endpoint_returns_pending_when_no_result() -> None:
@@ -775,6 +778,29 @@ def test_api_dataset_profile_from_direct_path(tmp_path: Path) -> None:
     assert len(payload["question_seeds"]) >= 1
     assert any(str(row.get("label", "")).startswith("y_bin ~") for row in payload["question_seeds"])
     assert payload["resolved_dataset_path"].endswith("outputs/tables/ut_profile_dataset.csv")
+    assert payload["research_mode"] is True
+    if payload["question_seeds"]:
+        seed = payload["question_seeds"][0]
+        assert "risk_level" in seed
+        assert "risk_flags" in seed
+
+    fixed_resp = client.get(
+        "/datasets/profile",
+        params={
+            "dataset_path": "outputs/tables/ut_profile_dataset.csv",
+            "sample_rows": 100,
+            "top_n": 10,
+            "fixed_y": "y_bin",
+            "exclude_x_cols": "x_num",
+            "research_mode": "true",
+        },
+    )
+    assert fixed_resp.status_code == 200
+    fixed_payload = fixed_resp.json()
+    assert fixed_payload["fixed_y"] == "y_bin"
+    assert fixed_payload["exclude_x_cols"] == ["x_num"]
+    assert all(str(row.get("y_col", "")) == "y_bin" for row in fixed_payload["question_seeds"])
+    assert all(str(row.get("x_col", "")) != "x_num" for row in fixed_payload["question_seeds"])
 
 
 def test_api_dataset_profile_from_run_artifact(tmp_path: Path) -> None:

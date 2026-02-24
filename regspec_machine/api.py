@@ -106,6 +106,24 @@ def _slug(text: str) -> str:
     return cleaned or "run"
 
 
+def _parse_csv_list(text: str) -> List[str]:
+    raw = str(text or "").strip()
+    if not raw:
+        return []
+    rows = []
+    seen = set()
+    for part in raw.split(","):
+        item = str(part).strip()
+        if not item:
+            continue
+        norm = item.lower()
+        if norm in seen:
+            continue
+        seen.add(norm)
+        rows.append(item)
+    return rows
+
+
 def _is_nooption_mode(mode: str) -> bool:
     text = str(mode or "").strip().lower()
     return text in {"nooption", "nooption_baseline", "nooption_hypothesis_panel"}
@@ -832,8 +850,13 @@ def create_app(
         dataset_path: Path,
         sample_rows: int,
         top_n: int,
+        research_mode: bool,
+        fixed_y: str,
+        exclude_x_cols: List[str],
     ) -> Dict[str, Any]:
         stat = dataset_path.stat()
+        fixed_y_text = str(fixed_y or "").strip()
+        exclude_x_norm = sorted({str(x).strip().lower() for x in exclude_x_cols if str(x).strip()})
         cache_key = "|".join(
             [
                 str(dataset_path),
@@ -841,6 +864,9 @@ def create_app(
                 str(int(stat.st_size)),
                 str(int(sample_rows)),
                 str(int(top_n)),
+                "research=1" if research_mode else "research=0",
+                f"fixed_y={fixed_y_text.lower()}",
+                f"exclude_x={','.join(exclude_x_norm)}",
             ]
         )
         row = dataset_profile_cache["rows"].get(cache_key)
@@ -852,6 +878,9 @@ def create_app(
             dataset_path=dataset_path,
             sample_rows=int(sample_rows),
             top_n=int(top_n),
+            research_mode=bool(research_mode),
+            fixed_y=fixed_y_text,
+            exclude_x_cols=list(exclude_x_cols),
         )
         payload["cache_hit"] = False
         dataset_profile_cache["rows"] = {cache_key: payload}
@@ -1222,6 +1251,9 @@ def create_app(
         artifact_key: str = Query(default="auto"),
         sample_rows: int = Query(default=20000, ge=100, le=500000),
         top_n: int = Query(default=20, ge=1, le=100),
+        research_mode: bool = Query(default=True),
+        fixed_y: str = Query(default=""),
+        exclude_x_cols: str = Query(default=""),
     ) -> Dict[str, Any]:
         artifact_key_text = str(artifact_key or "auto").strip().lower()
         if artifact_key_text not in {"auto", "scan_runs_csv", "top_models_inference_csv", "top_models_csv"}:
@@ -1244,11 +1276,17 @@ def create_app(
         if not Path(path).is_file():
             raise HTTPException(status_code=404, detail=f"dataset file not found: {path}")
 
+        fixed_y_text = str(fixed_y or "").strip()
+        exclude_x_list = _parse_csv_list(exclude_x_cols)
+
         try:
             payload = _cached_dataset_profile(
                 dataset_path=Path(path),
                 sample_rows=int(sample_rows),
                 top_n=int(top_n),
+                research_mode=bool(research_mode),
+                fixed_y=fixed_y_text,
+                exclude_x_cols=exclude_x_list,
             )
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc

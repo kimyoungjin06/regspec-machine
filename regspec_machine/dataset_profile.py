@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional
 
 import pandas as pd
 from pandas import CategoricalDtype
@@ -25,6 +25,67 @@ _TECHNICAL_NAME_TOKENS = (
     "cli_summary",
 )
 
+_LEAKAGE_NAME_TOKENS = (
+    "p_boot",
+    "p_value",
+    "q_value",
+    "candidate_tier",
+    "status_validation",
+    "validated",
+    "support_candidate",
+    "top_model",
+    "model_score",
+    "validation_score",
+    "scan_score",
+    "candidate_rank",
+    "effect_size",
+    "coef",
+    "stderr",
+    "loglik",
+    "aic",
+    "bic",
+)
+
+_OUTCOME_NAME_TOKENS = (
+    "policy_cited",
+    "policy_cite_count",
+    "policy_citation",
+    "policy_impact",
+    "outcome",
+    "target",
+    "label",
+    "dependent",
+    "response",
+    "time_to_first",
+    "time_to_",
+    "citation_",
+    "cited_",
+)
+
+_POST_TREATMENT_HINT_TOKENS = (
+    "post_",
+    "_post",
+    "after_",
+    "_after",
+    "future",
+    "lead",
+    "delta",
+    "change",
+    "growth",
+    "next_",
+)
+
+
+def _norm_name(col_name: str) -> str:
+    return str(col_name).strip().lower()
+
+
+def _contains_any_token(text: str, tokens: Iterable[str]) -> bool:
+    for token in tokens:
+        if token in text:
+            return True
+    return False
+
 
 def _safe_float(value: Any) -> Optional[float]:
     try:
@@ -37,7 +98,7 @@ def _safe_float(value: Any) -> Optional[float]:
 
 
 def _is_id_like(*, col_name: str, unique_share: float) -> bool:
-    text = str(col_name).strip().lower()
+    text = _norm_name(col_name)
     if not text:
         return False
     if unique_share >= 0.98 and any(token in text for token in ("id", "uuid", "doi", "key")):
@@ -48,15 +109,33 @@ def _is_id_like(*, col_name: str, unique_share: float) -> bool:
 
 
 def _is_technical_column(col_name: str) -> bool:
-    text = str(col_name).strip().lower()
+    text = _norm_name(col_name)
     if not text:
         return False
     if text.endswith("_path"):
         return True
-    for token in _TECHNICAL_NAME_TOKENS:
-        if token in text:
-            return True
-    return False
+    return _contains_any_token(text, _TECHNICAL_NAME_TOKENS)
+
+
+def _is_outcome_like_column(col_name: str) -> bool:
+    text = _norm_name(col_name)
+    if not text:
+        return False
+    return _contains_any_token(text, _OUTCOME_NAME_TOKENS)
+
+
+def _is_leakage_like_column(col_name: str) -> bool:
+    text = _norm_name(col_name)
+    if not text:
+        return False
+    return _contains_any_token(text, _LEAKAGE_NAME_TOKENS)
+
+
+def _is_post_treatment_hint_column(col_name: str) -> bool:
+    text = _norm_name(col_name)
+    if not text:
+        return False
+    return _contains_any_token(text, _POST_TREATMENT_HINT_TOKENS)
 
 
 def _dtype_group(series: pd.Series) -> str:
@@ -135,65 +214,81 @@ def _build_column_profile(
     return out
 
 
+def _to_y_candidate(col: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    col_name = str(col.get("name", "")).strip()
+    if not col_name:
+        return None
+    if _is_technical_column(col_name):
+        return None
+    nonmissing_share = float(col.get("nonmissing_share") or 0.0)
+    if nonmissing_share < 0.60:
+        return None
+    unique_share = float(col.get("unique_share") or 0.0)
+    if _is_id_like(col_name=col_name, unique_share=unique_share):
+        return None
+
+    dtype_group = str(col.get("dtype_group", ""))
+    unique_count = int(col.get("unique_count") or 0)
+    if dtype_group in {"numeric", "bool"} and bool(col.get("is_binary_numeric")):
+        return {
+            "name": col_name,
+            "y_type": "binary",
+            "nonmissing_share": nonmissing_share,
+            "unique_count": unique_count,
+            "priority": 3.0 + nonmissing_share,
+        }
+    if dtype_group in {"numeric", "bool"} and bool(col.get("is_nonnegative_integer")) and unique_count >= 4:
+        return {
+            "name": col_name,
+            "y_type": "count",
+            "nonmissing_share": nonmissing_share,
+            "unique_count": unique_count,
+            "priority": 2.0 + nonmissing_share,
+        }
+    if dtype_group in {"numeric", "bool"}:
+        std = _safe_float(col.get("std"))
+        if std is not None and std > 0:
+            return {
+                "name": col_name,
+                "y_type": "continuous",
+                "nonmissing_share": nonmissing_share,
+                "unique_count": unique_count,
+                "priority": 1.0 + nonmissing_share,
+            }
+    return None
+
+
 def _select_y_candidates(columns: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     rows: List[Dict[str, Any]] = []
     for col in columns:
-        col_name = str(col.get("name"))
-        if _is_technical_column(col_name):
-            continue
-        nonmissing_share = float(col.get("nonmissing_share") or 0.0)
-        if nonmissing_share < 0.60:
-            continue
-        unique_share = float(col.get("unique_share") or 0.0)
-        if _is_id_like(col_name=col_name, unique_share=unique_share):
-            continue
-
-        dtype_group = str(col.get("dtype_group", ""))
-        if dtype_group in {"numeric", "bool"} and bool(col.get("is_binary_numeric")):
-            rows.append(
-                {
-                    "name": col_name,
-                    "y_type": "binary",
-                    "nonmissing_share": nonmissing_share,
-                    "unique_count": int(col.get("unique_count") or 0),
-                    "priority": 3.0 + nonmissing_share,
-                }
-            )
-            continue
-        if dtype_group in {"numeric", "bool"} and bool(col.get("is_nonnegative_integer")):
-            unique_count = int(col.get("unique_count") or 0)
-            if unique_count >= 4:
-                rows.append(
-                    {
-                        "name": col_name,
-                        "y_type": "count",
-                        "nonmissing_share": nonmissing_share,
-                        "unique_count": unique_count,
-                        "priority": 2.0 + nonmissing_share,
-                    }
-                )
-                continue
-        if dtype_group in {"numeric", "bool"}:
-            std = _safe_float(col.get("std"))
-            if std is not None and std > 0:
-                rows.append(
-                    {
-                        "name": col_name,
-                        "y_type": "continuous",
-                        "nonmissing_share": nonmissing_share,
-                        "unique_count": int(col.get("unique_count") or 0),
-                        "priority": 1.0 + nonmissing_share,
-                    }
-                )
+        y_row = _to_y_candidate(col)
+        if y_row is not None:
+            rows.append(y_row)
     rows_sorted = sorted(rows, key=lambda r: (float(r["priority"]), int(r["unique_count"])), reverse=True)
     return rows_sorted[:12]
 
 
-def _select_x_candidates(columns: List[Dict[str, Any]], *, n_rows: int) -> List[Dict[str, Any]]:
+def _select_x_candidates(
+    columns: List[Dict[str, Any]],
+    *,
+    n_rows: int,
+    research_mode: bool,
+    y_names: Optional[set[str]] = None,
+    exclude_x_names: Optional[set[str]] = None,
+) -> List[Dict[str, Any]]:
+    y_name_set = {n.strip().lower() for n in (y_names or set()) if str(n).strip()}
+    exclude_name_set = {n.strip().lower() for n in (exclude_x_names or set()) if str(n).strip()}
     rows: List[Dict[str, Any]] = []
     for col in columns:
         name = str(col.get("name", ""))
+        norm_name = _norm_name(name)
         if _is_technical_column(name):
+            continue
+        if norm_name in y_name_set:
+            continue
+        if norm_name in exclude_name_set:
+            continue
+        if research_mode and (_is_outcome_like_column(name) or _is_leakage_like_column(name)):
             continue
         nonmissing_share = float(col.get("nonmissing_share") or 0.0)
         if nonmissing_share < 0.60:
@@ -259,6 +354,36 @@ def _to_time_numeric(series: pd.Series) -> pd.Series:
     ts = pd.to_datetime(series, errors="coerce", utc=True)
     # nanosecond epoch; keep float for correlation usage.
     return pd.Series(ts.view("int64"), index=series.index, dtype="float64").where(ts.notna(), other=float("nan"))
+
+
+def _assess_seed_risk(*, y_col: str, x_col: str, x_type: str, y_type: str) -> Dict[str, Any]:
+    y_name = _norm_name(y_col)
+    x_name = _norm_name(x_col)
+    flags: List[str] = []
+    if _is_outcome_like_column(x_col):
+        flags.append("x_outcome_like")
+    if _is_leakage_like_column(x_col):
+        flags.append("x_model_output_like")
+    if _is_post_treatment_hint_column(x_col):
+        flags.append("x_post_treatment_hint")
+    if y_name in x_name or x_name in y_name:
+        flags.append("x_name_overlaps_y")
+    if y_type == "binary" and x_type == "categorical":
+        flags.append("x_categorical_binary_screen_only")
+
+    level = "low"
+    penalty = 0.0
+    if "x_outcome_like" in flags or "x_model_output_like" in flags:
+        level = "high"
+        penalty = 0.30
+    elif flags:
+        level = "medium"
+        penalty = 0.12
+    return {
+        "risk_flags": flags,
+        "risk_level": level,
+        "risk_penalty": float(penalty),
+    }
 
 
 def _pair_score(
@@ -333,15 +458,20 @@ def _pair_score(
 
     if score is None:
         return None
+    risk = _assess_seed_risk(y_col=y_col, x_col=x_col, x_type=x_type, y_type=y_type)
+    adjusted_score = float(score) * (1.0 - float(risk["risk_penalty"]))
     return {
         "y_col": y_col,
         "y_type": y_type,
         "x_col": x_col,
         "x_type": x_type,
         "score": float(score),
+        "score_adjusted": float(adjusted_score),
         "support_rows": n,
         "pair_nonmissing_share": float(n / float(len(df))) if len(df) > 0 else 0.0,
         "signal_summary": signal,
+        "risk_level": str(risk["risk_level"]),
+        "risk_flags": list(risk["risk_flags"]),
         "label": f"{y_col} ~ {x_col}",
     }
 
@@ -370,7 +500,15 @@ def _build_question_seeds(
                 continue
             rows.append(score_row)
 
-    rows_sorted = sorted(rows, key=lambda r: (float(r["score"]), float(r["pair_nonmissing_share"])), reverse=True)
+    rows_sorted = sorted(
+        rows,
+        key=lambda r: (
+            float(r.get("score_adjusted") or 0.0),
+            float(r.get("score") or 0.0),
+            float(r.get("pair_nonmissing_share") or 0.0),
+        ),
+        reverse=True,
+    )
     out: List[Dict[str, Any]] = []
     for idx, row in enumerate(rows_sorted[: max(1, int(top_n))], start=1):
         copied = dict(row)
@@ -384,6 +522,9 @@ def profile_dataset_csv(
     dataset_path: Path,
     sample_rows: int = 20000,
     top_n: int = 20,
+    research_mode: bool = True,
+    fixed_y: str = "",
+    exclude_x_cols: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     nrows = max(1, int(sample_rows))
     df = pd.read_csv(dataset_path, nrows=nrows, low_memory=False)
@@ -404,7 +545,29 @@ def profile_dataset_csv(
 
     columns_sorted = sorted(columns, key=lambda c: float(c.get("missing_share") or 0.0), reverse=True)
     y_candidates = _select_y_candidates(columns)
-    x_candidates = _select_x_candidates(columns, n_rows=row_count)
+    fixed_y_text = str(fixed_y or "").strip()
+    fixed_y_used = ""
+    if fixed_y_text:
+        by_norm = {_norm_name(str(c.get("name", ""))): c for c in columns}
+        fixed_col = by_norm.get(_norm_name(fixed_y_text))
+        if fixed_col is None:
+            raise ValueError(f"fixed_y not found in dataset columns: {fixed_y_text}")
+        fixed_y_row = _to_y_candidate(fixed_col)
+        if fixed_y_row is None:
+            raise ValueError(f"fixed_y is not a valid numeric/binary target candidate: {fixed_y_text}")
+        fixed_y_used = str(fixed_y_row["name"])
+        y_candidates = [fixed_y_row]
+
+    raw_exclude = exclude_x_cols or []
+    exclude_x_norm = {_norm_name(x) for x in raw_exclude if str(x).strip()}
+    y_name_set = {_norm_name(str(row.get("name", ""))) for row in y_candidates if str(row.get("name", "")).strip()}
+    x_candidates = _select_x_candidates(
+        columns,
+        n_rows=row_count,
+        research_mode=bool(research_mode),
+        y_names=y_name_set,
+        exclude_x_names=exclude_x_norm,
+    )
     question_seeds = _build_question_seeds(
         df=df,
         y_candidates=y_candidates,
@@ -431,6 +594,9 @@ def profile_dataset_csv(
         "row_count": row_count,
         "column_count": column_count,
         "sample_rows_used": row_count,
+        "research_mode": bool(research_mode),
+        "fixed_y": fixed_y_used,
+        "exclude_x_cols": sorted(exclude_x_norm),
         "columns": columns,
         "y_candidates": y_candidates,
         "x_candidates": x_candidates,
