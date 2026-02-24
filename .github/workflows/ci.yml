@@ -30,8 +30,15 @@ jobs:
           python -m pytest -q
 
   build_smoke:
-    runs-on: ubuntu-latest
     needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+          - macos-latest
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -48,15 +55,10 @@ jobs:
 
       - name: Build desktop smoke bundle
         run: |
-          regspec-build-desktop \
-            --project-root . \
-            --dist-dir /tmp/regspec_ci_build/dist \
-            --work-dir /tmp/regspec_ci_build/work \
-            --spec-dir /tmp/regspec_ci_build/spec \
-            --manifest-json /tmp/regspec_ci_build/manifest.json
+          regspec-build-desktop --project-root . --dist-dir build/ci_dist --work-dir build/ci_work --spec-dir build/ci_spec --manifest-json build/ci_manifest_${{ runner.os }}.json
 
       - name: Upload build manifest
         uses: actions/upload-artifact@v4
         with:
-          name: regspec-desktop-build-manifest
-          path: /tmp/regspec_ci_build/manifest.json
+          name: regspec-desktop-build-manifest-${{ runner.os }}
+          path: build/ci_manifest_${{ runner.os }}.json

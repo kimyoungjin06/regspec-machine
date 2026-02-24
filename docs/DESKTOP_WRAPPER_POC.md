@@ -44,3 +44,7 @@ Options:
 - `--windowed`
 - `--no-smoke-check`
 - `--manifest-json /custom/path/manifest.json`
+
+CI smoke:
+
+- `.github/workflows/ci.yml` executes desktop bundle smoke on `ubuntu/windows/macos` and uploads per-OS manifest artifacts.

@@ -73,7 +73,7 @@ python -m pytest -q tests/test_parity_l2_l3_l4.py
 
 CI:
 - GitHub Actions runs `python -m pytest -q` on push/PR (`.github/workflows/ci.yml`)
-- CI also runs `regspec-build-desktop` smoke build and uploads bundle manifest artifact.
+- CI also runs `regspec-build-desktop` smoke build on `ubuntu/windows/macos` matrix and uploads OS-specific manifest artifacts.
 
 ## Quick start (Python API)
 

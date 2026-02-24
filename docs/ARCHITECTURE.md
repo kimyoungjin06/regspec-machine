@@ -37,4 +37,4 @@
 
 - `tests/test_parity_l2_l3_l4.py` verifies same-input parity for L2/L3/L4 (`succeeded` and `failed` paths).
 - Governance payload parity is enforced for `search_governance.validation_used_for_search=false` and `candidate_pool_locked_pre_validation=true`.
-- CI (`.github/workflows/ci.yml`) runs pytest and desktop bundle smoke (`regspec-build-desktop`) on push/PR.
+- CI (`.github/workflows/ci.yml`) runs pytest and desktop bundle smoke (`regspec-build-desktop`) on push/PR with `ubuntu/windows/macos` matrix.
