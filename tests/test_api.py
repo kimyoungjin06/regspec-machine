@@ -312,6 +312,11 @@ def test_api_ui_endpoint_serves_html_console() -> None:
     assert "list_mode_filter" in resp.text
     assert "list_run_id_filter" in resp.text
     assert "runs_notice" in resp.text
+    assert "Dataset Explorer (Question Seeder)" in resp.text
+    assert "dataset_run_id" in resp.text
+    assert "dataset_path" in resp.text
+    assert "profile_btn" in resp.text
+    assert "profile_seed_tbody" in resp.text
 
 
 def test_api_review_endpoint_returns_pending_when_no_result() -> None:
@@ -699,3 +704,148 @@ def test_api_history_scan_supports_listing_and_detail(tmp_path: Path) -> None:
     review = review_resp.json()["review"]
     assert review["metrics"]["validated_candidate_count"] == 1
     assert review["metrics"]["best_p_validation"] == 0.02
+
+
+def test_api_dataset_profile_from_direct_path(tmp_path: Path) -> None:
+    class _DatasetEngine:
+        def __init__(self, workspace_root: Path) -> None:
+            self.workspace_root = workspace_root
+
+        def execute(self, request: RunRequestContract, *, dry_run: bool = False) -> EngineExecution:
+            raise RuntimeError("not used in dataset profile direct path test")
+
+    csv_path = tmp_path / "outputs" / "tables" / "ut_profile_dataset.csv"
+    csv_path.parent.mkdir(parents=True, exist_ok=True)
+    csv_path.write_text(
+        "\n".join(
+            [
+                "paper_id,y_bin,y_count,x_num,x_cat",
+                "p1,1,2,0.9,a",
+                "p2,0,0,0.1,b",
+                "p3,1,3,0.8,a",
+                "p4,0,1,0.2,b",
+                "p5,1,4,0.95,a",
+                "p6,0,0,0.05,b",
+                "p7,1,3,0.88,a",
+                "p8,0,1,0.15,b",
+                "p9,1,5,0.99,a",
+                "p10,0,0,0.07,b",
+                "p11,1,4,0.91,a",
+                "p12,0,0,0.09,b",
+                "p13,1,3,0.93,a",
+                "p14,0,1,0.22,b",
+                "p15,1,4,0.97,a",
+                "p16,0,0,0.11,b",
+                "p17,1,3,0.84,a",
+                "p18,0,1,0.17,b",
+                "p19,1,4,0.89,a",
+                "p20,0,0,0.13,b",
+                "p21,1,5,0.94,a",
+                "p22,0,1,0.19,b",
+                "p23,1,4,0.92,a",
+                "p24,0,0,0.08,b",
+                "p25,1,3,0.86,a",
+                "p26,0,1,0.18,b",
+                "p27,1,4,0.96,a",
+                "p28,0,0,0.12,b",
+                "p29,1,3,0.87,a",
+                "p30,0,1,0.16,b",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    orch = RunOrchestrator(engine=_DatasetEngine(workspace_root=tmp_path))
+    app = create_app(orchestrator=orch)
+    client = TestClient(app)
+
+    resp = client.get(
+        "/datasets/profile",
+        params={
+            "dataset_path": "outputs/tables/ut_profile_dataset.csv",
+            "sample_rows": 100,
+            "top_n": 10,
+        },
+    )
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["row_count"] == 30
+    assert payload["column_count"] == 5
+    assert len(payload["question_seeds"]) >= 1
+    assert any(str(row.get("label", "")).startswith("y_bin ~") for row in payload["question_seeds"])
+    assert payload["resolved_dataset_path"].endswith("outputs/tables/ut_profile_dataset.csv")
+
+
+def test_api_dataset_profile_from_run_artifact(tmp_path: Path) -> None:
+    class _ProfileArtifactEngine:
+        def __init__(self, workspace_root: Path) -> None:
+            self.workspace_root = workspace_root
+
+        def execute(self, request: RunRequestContract, *, dry_run: bool = False) -> EngineExecution:
+            rel = f"outputs/tables/{request.run_id}_scan_runs.csv"
+            path = self.workspace_root / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(
+                "\n".join(
+                    [
+                        "candidate_id,y_col,feature_name,p_boot_validation,q_value_validation",
+                        "c1,y_bin,x_num,0.01,0.05",
+                        "c2,y_bin,x_cat,0.02,0.06",
+                        "c3,y_count,x_num,0.03,0.08",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            status = RunStatusContract.create(
+                run_id=request.run_id,
+                mode=request.mode,
+                state="succeeded",
+                progress_stage="completed",
+                progress_message="ok",
+                progress_fraction=1.0,
+            )
+            result = RunResultContract.create(
+                run_id=request.run_id,
+                mode=request.mode,
+                state="succeeded",
+                artifacts=RunArtifactsContract(scan_runs_csv=rel),
+                counts={"scan_rows": 3},
+            )
+            return EngineExecution(
+                request=request,
+                command=("fake", request.mode),
+                returncode=0,
+                status=status,
+                result=result,
+                stdout="ok",
+                stderr="",
+            )
+
+    orch = RunOrchestrator(engine=_ProfileArtifactEngine(workspace_root=tmp_path))
+    app = create_app(orchestrator=orch)
+    client = TestClient(app)
+
+    create = client.post(
+        "/runs",
+        json={"mode": "singlex_baseline", "run_id": "ut_dataset_profile_artifact"},
+    )
+    assert create.status_code == 202
+    assert _wait_terminal_state(client, "ut_dataset_profile_artifact") == "succeeded"
+
+    resp = client.get(
+        "/datasets/profile",
+        params={
+            "run_id": "ut_dataset_profile_artifact",
+            "artifact_key": "scan_runs_csv",
+            "sample_rows": 100,
+            "top_n": 5,
+        },
+    )
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["run_id"] == "ut_dataset_profile_artifact"
+    assert payload["artifact_key"] == "scan_runs_csv"
+    assert payload["row_count"] == 3
+    assert payload["resolved_dataset_path"].endswith("ut_dataset_profile_artifact_scan_runs.csv")

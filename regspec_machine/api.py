@@ -20,6 +20,7 @@ from .contracts import (
     RunResultContract,
     RunStatusContract,
 )
+from .dataset_profile import profile_dataset_csv
 from .engine import PresetEngine
 from .orchestrator import RunOrchestrator
 from .ui_page import build_ui_page_html
@@ -707,6 +708,155 @@ def create_app(
             "source": str(entry.get("source_kind", "live")),
         }
 
+    dataset_profile_cache: Dict[str, Any] = {
+        "rows": {},
+    }
+
+    def _iter_entries_latest(*, include_history: bool = True) -> List[Dict[str, Any]]:
+        seen_run_ids = set()
+        out: List[Dict[str, Any]] = []
+
+        live_rows = orch.list_snapshots(state="")
+        for row in live_rows:
+            item = {
+                "request": row.request,
+                "status": row.status,
+                "result": row.result,
+                "returncode": row.returncode,
+                "source_kind": "live",
+            }
+            out.append(item)
+            seen_run_ids.add(str(row.request.run_id))
+
+        if include_history:
+            for entry in _load_history_rows().values():
+                run_id_text = str(entry.get("request").run_id) if entry.get("request") is not None else ""
+                if not run_id_text or run_id_text in seen_run_ids:
+                    continue
+                out.append(dict(entry))
+                seen_run_ids.add(run_id_text)
+
+        out_sorted = sorted(
+            out,
+            key=lambda entry: str(entry.get("status").updated_at_utc if entry.get("status") is not None else ""),
+            reverse=True,
+        )
+        return out_sorted
+
+    def _resolve_dataset_path_from_entry(
+        *,
+        entry: Mapping[str, Any],
+        artifact_key: str,
+    ) -> Optional[Dict[str, Any]]:
+        result = entry.get("result")
+        request = entry.get("request")
+        if result is None or request is None:
+            return None
+        artifact_map = result.artifacts.as_dict()
+        artifact_key_text = str(artifact_key or "auto").strip().lower()
+        allowed_keys = (
+            "scan_runs_csv",
+            "top_models_inference_csv",
+            "top_models_csv",
+        )
+        if artifact_key_text == "auto":
+            ordered_keys = list(allowed_keys)
+        else:
+            if artifact_key_text not in allowed_keys:
+                return None
+            ordered_keys = [artifact_key_text]
+
+        for key in ordered_keys:
+            resolved = _resolve_artifact_path(
+                workspace_root=_workspace_root(),
+                raw=str(artifact_map.get(key, "")),
+            )
+            if resolved is not None and resolved.is_file():
+                return {
+                    "dataset_path": resolved,
+                    "artifact_key": key,
+                    "run_id": str(request.run_id),
+                    "source": str(entry.get("source_kind", "live")),
+                }
+
+        for key in ordered_keys:
+            resolved = _resolve_artifact_path(
+                workspace_root=_workspace_root(),
+                raw=str(artifact_map.get(key, "")),
+            )
+            if resolved is not None:
+                return {
+                    "dataset_path": resolved,
+                    "artifact_key": key,
+                    "run_id": str(request.run_id),
+                    "source": str(entry.get("source_kind", "live")),
+                }
+        return None
+
+    def _resolve_dataset_path_request(
+        *,
+        dataset_path: str,
+        run_id: str,
+        artifact_key: str,
+    ) -> Optional[Dict[str, Any]]:
+        path_text = str(dataset_path or "").strip()
+        if path_text:
+            p = Path(path_text)
+            if not p.is_absolute():
+                p = (_workspace_root() / p).resolve()
+            else:
+                p = p.resolve()
+            return {
+                "dataset_path": p,
+                "artifact_key": "direct_path",
+                "run_id": str(run_id or "").strip(),
+                "source": "user",
+            }
+
+        run_id_text = str(run_id or "").strip()
+        artifact_key_text = str(artifact_key or "auto").strip().lower()
+        if run_id_text:
+            entry = _resolve_run_entry(run_id_text)
+            if entry is None:
+                return None
+            return _resolve_dataset_path_from_entry(entry=entry, artifact_key=artifact_key_text)
+
+        for entry in _iter_entries_latest(include_history=True):
+            resolved = _resolve_dataset_path_from_entry(entry=entry, artifact_key=artifact_key_text)
+            if resolved is not None:
+                return resolved
+        return None
+
+    def _cached_dataset_profile(
+        *,
+        dataset_path: Path,
+        sample_rows: int,
+        top_n: int,
+    ) -> Dict[str, Any]:
+        stat = dataset_path.stat()
+        cache_key = "|".join(
+            [
+                str(dataset_path),
+                str(int(stat.st_mtime_ns)),
+                str(int(stat.st_size)),
+                str(int(sample_rows)),
+                str(int(top_n)),
+            ]
+        )
+        row = dataset_profile_cache["rows"].get(cache_key)
+        if row is not None:
+            cached_payload = dict(row)
+            cached_payload["cache_hit"] = True
+            return cached_payload
+        payload = profile_dataset_csv(
+            dataset_path=dataset_path,
+            sample_rows=int(sample_rows),
+            top_n=int(top_n),
+        )
+        payload["cache_hit"] = False
+        dataset_profile_cache["rows"] = {cache_key: payload}
+        return dict(payload)
+
     app = FastAPI(
         title="regspec-machine API",
         version="0.1.0",
@@ -1031,6 +1181,90 @@ def create_app(
             "artifact_exists": existing_map,
             "source": str(entry.get("source_kind", "live")),
         }
+
+    @app.get("/datasets/candidates")
+    def get_dataset_candidates(limit: int = Query(default=30, ge=1, le=200)) -> Dict[str, Any]:
+        rows = []
+        for entry in _iter_entries_latest(include_history=True):
+            request = entry.get("request")
+            if request is None:
+                continue
+            for artifact_key in ("scan_runs_csv", "top_models_inference_csv", "top_models_csv"):
+                resolved = _resolve_dataset_path_from_entry(entry=entry, artifact_key=artifact_key)
+                if resolved is None:
+                    continue
+                p = resolved.get("dataset_path")
+                if p is None:
+                    continue
+                rows.append(
+                    {
+                        "run_id": str(resolved.get("run_id", "")),
+                        "mode": str(request.mode),
+                        "artifact_key": str(resolved.get("artifact_key", "")),
+                        "dataset_path": str(p),
+                        "exists": bool(Path(p).is_file()),
+                        "source": str(resolved.get("source", "live")),
+                        "updated_at_utc": str(entry.get("status").updated_at_utc if entry.get("status") else ""),
+                    }
+                )
+                break
+            if len(rows) >= int(limit):
+                break
+        return {
+            "rows": rows[: int(limit)],
+            "total_rows": len(rows[: int(limit)]),
+        }
+
+    @app.get("/datasets/profile")
+    def get_dataset_profile(
+        dataset_path: str = Query(default=""),
+        run_id: str = Query(default=""),
+        artifact_key: str = Query(default="auto"),
+        sample_rows: int = Query(default=20000, ge=100, le=500000),
+        top_n: int = Query(default=20, ge=1, le=100),
+    ) -> Dict[str, Any]:
+        artifact_key_text = str(artifact_key or "auto").strip().lower()
+        if artifact_key_text not in {"auto", "scan_runs_csv", "top_models_inference_csv", "top_models_csv"}:
+            raise HTTPException(
+                status_code=422,
+                detail="artifact_key must be one of: auto, scan_runs_csv, top_models_inference_csv, top_models_csv",
+            )
+
+        resolved = _resolve_dataset_path_request(
+            dataset_path=str(dataset_path or "").strip(),
+            run_id=str(run_id or "").strip(),
+            artifact_key=artifact_key_text,
+        )
+        if resolved is None:
+            raise HTTPException(
+                status_code=404,
+                detail="dataset path could not be resolved from request; provide dataset_path or valid run_id",
+            )
+        path = resolved["dataset_path"]
+        if not Path(path).is_file():
+            raise HTTPException(status_code=404, detail=f"dataset file not found: {path}")
+
+        try:
+            payload = _cached_dataset_profile(
+                dataset_path=Path(path),
+                sample_rows=int(sample_rows),
+                top_n=int(top_n),
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"dataset profile failed: {exc}") from exc
+
+        payload.update(
+            {
+                "generated_at_utc": _utc_now_isoz(),
+                "resolved_dataset_path": str(path),
+                "artifact_key": str(resolved.get("artifact_key", "")),
+                "run_id": str(resolved.get("run_id", "")),
+                "source": str(resolved.get("source", "user")),
+            }
+        )
+        return payload
 
     @app.get("/ui", response_class=HTMLResponse)
     def ui_index() -> HTMLResponse:

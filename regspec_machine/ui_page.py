@@ -401,6 +401,62 @@ def build_ui_page_html(*, run_modes: Iterable[str]) -> str:
       color: var(--muted);
       line-height: 1.35;
     }
+    .viz-grid {
+      margin-top: 10px;
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 8px;
+    }
+    @media (min-width: 860px) {
+      .viz-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+    .viz-card {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #f8fbff;
+      padding: 8px;
+    }
+    .viz-card h3 {
+      margin: 0 0 6px;
+      font-size: 12px;
+      font-family: "Space Grotesk", "IBM Plex Sans", sans-serif;
+      color: var(--ink);
+    }
+    .bar-list {
+      display: grid;
+      gap: 6px;
+    }
+    .bar-row {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr auto;
+      gap: 6px;
+      align-items: center;
+      font-size: 11px;
+    }
+    .bar-label {
+      color: var(--muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .bar-track {
+      background: #e6eef9;
+      border-radius: 999px;
+      height: 8px;
+      overflow: hidden;
+    }
+    .bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #3f6ca8, #2f82c7);
+    }
+    .bar-value {
+      color: var(--ink);
+      font-weight: 600;
+      min-width: 42px;
+      text-align: right;
+    }
     .interp-ok {
       color: var(--ok) !important;
       font-weight: 600;
@@ -629,6 +685,83 @@ __MODE_FILTER_OPTIONS__
     </section>
 
     <section class="card" style="margin-top: 14px;">
+      <h2>Dataset Explorer (Question Seeder)</h2>
+      <div class="row">
+        <div>
+          <label for="dataset_run_id">run_id (optional)</label>
+          <input id="dataset_run_id" placeholder="optional run_id to resolve artifacts" />
+        </div>
+        <div>
+          <label for="dataset_path">dataset_path (optional)</label>
+          <input id="dataset_path" placeholder="outputs/tables/....csv" />
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label for="dataset_artifact_key">artifact key</label>
+          <select id="dataset_artifact_key">
+            <option value="auto">auto</option>
+            <option value="scan_runs_csv">scan_runs_csv</option>
+            <option value="top_models_inference_csv">top_models_inference_csv</option>
+            <option value="top_models_csv">top_models_csv</option>
+          </select>
+        </div>
+        <div>
+          <label for="dataset_sample_rows">sample_rows</label>
+          <input id="dataset_sample_rows" type="number" min="100" step="100" value="20000" />
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label for="dataset_top_n">question seed top_n</label>
+          <input id="dataset_top_n" type="number" min="1" max="100" step="1" value="20" />
+        </div>
+        <div>
+          <label>profile status</label>
+          <div id="profile_notice" class="notice">ready</div>
+        </div>
+      </div>
+      <div class="toolbar">
+        <button id="profile_btn" class="secondary">Analyze Dataset</button>
+      </div>
+      <label>Profile Summary</label>
+      <div class="run-table-wrap compact-table">
+        <table>
+          <tbody id="profile_overview_tbody"></tbody>
+        </table>
+      </div>
+      <div class="viz-grid">
+        <div class="viz-card">
+          <h3>Missing Share Top</h3>
+          <div id="profile_missing_chart" class="bar-list"></div>
+        </div>
+        <div class="viz-card">
+          <h3>Question Seed Score Top</h3>
+          <div id="profile_seed_score_chart" class="bar-list"></div>
+        </div>
+      </div>
+      <label>Question Seeds</label>
+      <div class="run-table-wrap" style="margin-top: 8px;">
+        <table>
+          <thead>
+            <tr>
+              <th>rank</th>
+              <th>question</th>
+              <th>score</th>
+              <th>support_rows</th>
+              <th>signal</th>
+            </tr>
+          </thead>
+          <tbody id="profile_seed_tbody"></tbody>
+        </table>
+      </div>
+      <details>
+        <summary>Profile Raw JSON (debug)</summary>
+        <div id="profile_raw_box" class="mono">{}</div>
+      </details>
+    </section>
+
+    <section class="card" style="margin-top: 14px;">
       <h2>Run Monitor</h2>
       <div id="runs_notice" class="notice">ready</div>
       <div class="run-table-wrap">
@@ -671,6 +804,7 @@ __MODE_FILTER_OPTIONS__
     const UI_STATE = {
       submitBusy: false,
       inspectBusy: false,
+      profileBusy: false,
       runsBusy: false,
       healthBusy: false,
       compareBusy: false,
@@ -765,6 +899,18 @@ __MODE_FILTER_OPTIONS__
       return n;
     }
 
+    function parseBoundedInt(inputId, label, minValue, maxValue) {
+      const raw = String(byId(inputId).value || "").trim();
+      if (!raw) {
+        throw new Error(label + " is required");
+      }
+      const n = Number(raw);
+      if (!Number.isInteger(n) || n < Number(minValue) || n > Number(maxValue)) {
+        throw new Error(label + " must be an integer in [" + String(minValue) + ", " + String(maxValue) + "]");
+      }
+      return n;
+    }
+
     function setSubmitBusy(flag) {
       UI_STATE.submitBusy = Boolean(flag);
       const btn = byId("submit_btn");
@@ -780,6 +926,13 @@ __MODE_FILTER_OPTIONS__
       const btn = byId("inspect_btn");
       btn.disabled = UI_STATE.inspectBusy;
       btn.textContent = UI_STATE.inspectBusy ? "Inspecting..." : "Inspect";
+    }
+
+    function setProfileBusy(flag) {
+      UI_STATE.profileBusy = Boolean(flag);
+      const btn = byId("profile_btn");
+      btn.disabled = UI_STATE.profileBusy;
+      btn.textContent = UI_STATE.profileBusy ? "Analyzing..." : "Analyze Dataset";
     }
 
     function setCompareBusy(flag) {
@@ -1206,6 +1359,173 @@ __MODE_FILTER_OPTIONS__
       tr.appendChild(th);
       tr.appendChild(td);
       tbody.appendChild(tr);
+    }
+
+    function renderBarList(containerId, rows, labelKey, valueKey, digits) {
+      const wrap = byId(containerId);
+      wrap.replaceChildren();
+      const data = Array.isArray(rows) ? rows : [];
+      if (!data.length) {
+        const empty = document.createElement("div");
+        empty.className = "bar-label";
+        empty.textContent = "(none)";
+        wrap.appendChild(empty);
+        return;
+      }
+      const maxVal = Math.max(
+        1e-12,
+        ...data.map((row) => {
+          const n = Number(row && row[valueKey]);
+          return Number.isFinite(n) ? n : 0;
+        })
+      );
+      for (const row of data) {
+        const label = String(row && row[labelKey] ? row[labelKey] : "-");
+        const n = Number(row && row[valueKey]);
+        const value = Number.isFinite(n) ? n : 0;
+        const ratio = Math.max(0, Math.min(1, value / maxVal));
+
+        const line = document.createElement("div");
+        line.className = "bar-row";
+
+        const labelEl = document.createElement("div");
+        labelEl.className = "bar-label";
+        labelEl.title = label;
+        labelEl.textContent = label;
+
+        const track = document.createElement("div");
+        track.className = "bar-track";
+        const fill = document.createElement("div");
+        fill.className = "bar-fill";
+        fill.style.width = String(Math.round(ratio * 1000) / 10) + "%";
+        track.appendChild(fill);
+
+        const valueEl = document.createElement("div");
+        valueEl.className = "bar-value";
+        valueEl.textContent = fmt(value, digits);
+
+        line.appendChild(labelEl);
+        line.appendChild(track);
+        line.appendChild(valueEl);
+        wrap.appendChild(line);
+      }
+    }
+
+    function renderQuestionSeedTable(rows) {
+      const tbody = byId("profile_seed_tbody");
+      tbody.replaceChildren();
+      const data = Array.isArray(rows) ? rows : [];
+      if (!data.length) {
+        const tr = document.createElement("tr");
+        const td = document.createElement("td");
+        td.colSpan = 5;
+        td.textContent = "No question seeds found.";
+        tr.appendChild(td);
+        tbody.appendChild(tr);
+        return;
+      }
+      for (const row of data) {
+        const tr = document.createElement("tr");
+
+        const tdRank = document.createElement("td");
+        tdRank.textContent = String(row.rank || "-");
+        tr.appendChild(tdRank);
+
+        const tdQ = document.createElement("td");
+        tdQ.textContent = String(row.label || ((row.y_col || "-") + " ~ " + (row.x_col || "-")));
+        tr.appendChild(tdQ);
+
+        const tdScore = document.createElement("td");
+        tdScore.textContent = fmt(row.score, 4);
+        tr.appendChild(tdScore);
+
+        const tdSupport = document.createElement("td");
+        tdSupport.textContent = String(row.support_rows === undefined ? "-" : row.support_rows);
+        tr.appendChild(tdSupport);
+
+        const tdSignal = document.createElement("td");
+        tdSignal.textContent = String(row.signal_summary || "-");
+        tr.appendChild(tdSignal);
+
+        tbody.appendChild(tr);
+      }
+    }
+
+    function renderProfileOverview(payload) {
+      const tbody = byId("profile_overview_tbody");
+      tbody.replaceChildren();
+      appendOverviewRow(tbody, "resolved_dataset_path", payload.resolved_dataset_path || payload.dataset_path || "-");
+      appendOverviewRow(tbody, "run_id", payload.run_id || "-");
+      appendOverviewRow(tbody, "source", payload.source || "-");
+      appendOverviewRow(tbody, "artifact_key", payload.artifact_key || "-");
+      appendOverviewRow(tbody, "rows (sampled)", fmt(payload.row_count));
+      appendOverviewRow(tbody, "columns", fmt(payload.column_count));
+      appendOverviewRow(tbody, "y candidates", fmt(Array.isArray(payload.y_candidates) ? payload.y_candidates.length : 0));
+      appendOverviewRow(tbody, "x candidates", fmt(Array.isArray(payload.x_candidates) ? payload.x_candidates.length : 0));
+      appendOverviewRow(
+        tbody,
+        "question seeds",
+        fmt(Array.isArray(payload.question_seeds) ? payload.question_seeds.length : 0)
+      );
+      appendOverviewRow(tbody, "cache_hit", payload.cache_hit ? "yes" : "no");
+    }
+
+    async function runDatasetProfile() {
+      if (UI_STATE.profileBusy) return;
+      const notice = byId("profile_notice");
+      try {
+        const sampleRows = parseBoundedInt("dataset_sample_rows", "dataset_sample_rows", 100, 500000);
+        const topN = parseBoundedInt("dataset_top_n", "dataset_top_n", 1, 100);
+        const params = new URLSearchParams();
+        const runId = String(byId("dataset_run_id").value || "").trim();
+        const datasetPath = String(byId("dataset_path").value || "").trim();
+        const artifactKey = String(byId("dataset_artifact_key").value || "auto").trim();
+        if (runId) params.set("run_id", validateRunId(runId));
+        if (datasetPath) params.set("dataset_path", datasetPath);
+        if (artifactKey) params.set("artifact_key", artifactKey);
+        params.set("sample_rows", String(sampleRows));
+        params.set("top_n", String(topN));
+
+        setProfileBusy(true);
+        setNotice(notice, "", "profiling dataset...");
+
+        const payload = await fetchJson("/datasets/profile?" + params.toString());
+        byId("profile_raw_box").textContent = prettyJson(payload);
+        renderProfileOverview(payload);
+        renderQuestionSeedTable(payload.question_seeds || []);
+        renderBarList(
+          "profile_missing_chart",
+          payload.charts && payload.charts.missing_share_top ? payload.charts.missing_share_top : [],
+          "column",
+          "missing_share",
+          3
+        );
+        renderBarList(
+          "profile_seed_score_chart",
+          payload.charts && payload.charts.seed_score_top ? payload.charts.seed_score_top : [],
+          "label",
+          "score",
+          3
+        );
+
+        if (payload.resolved_dataset_path) {
+          byId("dataset_path").value = String(payload.resolved_dataset_path);
+        }
+        if (payload.run_id && !String(byId("dataset_run_id").value || "").trim()) {
+          byId("dataset_run_id").value = String(payload.run_id);
+        }
+        setNotice(
+          notice,
+          "ok",
+          "profiled: rows=" + String(payload.row_count || "-") +
+            ", cols=" + String(payload.column_count || "-") +
+            ", seeds=" + String((payload.question_seeds || []).length)
+        );
+      } catch (err) {
+        setNotice(notice, "error", String(err && err.message ? err.message : err));
+      } finally {
+        setProfileBusy(false);
+      }
     }
 
     function renderDetailOverview(statusResp, summaryResp, reviewResp) {
@@ -1789,6 +2109,9 @@ __MODE_FILTER_OPTIONS__
         renderReviewCards(review);
         renderDetailOverview(status, summary, review);
         setNotice(detailNotice, "ok", "loaded: " + rid);
+        if (!String(byId("dataset_run_id").value || "").trim()) {
+          byId("dataset_run_id").value = rid;
+        }
         if (!String(byId("compare_nooption_run_id").value || "").trim() &&
             !String(byId("compare_singlex_run_id").value || "").trim()) {
           try {
@@ -1928,6 +2251,26 @@ __MODE_FILTER_OPTIONS__
       }
     }
 
+    async function loadDatasetDefaultCandidate() {
+      try {
+        const payload = await fetchJson("/datasets/candidates?limit=1");
+        const rows = payload && Array.isArray(payload.rows) ? payload.rows : [];
+        if (!rows.length) return;
+        const row = rows[0] || {};
+        if (!String(byId("dataset_run_id").value || "").trim() && row.run_id) {
+          byId("dataset_run_id").value = String(row.run_id);
+        }
+        if (!String(byId("dataset_path").value || "").trim() && row.dataset_path) {
+          byId("dataset_path").value = String(row.dataset_path);
+        }
+        if (row.artifact_key) {
+          byId("dataset_artifact_key").value = String(row.artifact_key);
+        }
+      } catch (_err) {
+        // no-op: dataset profile can still run with manual input.
+      }
+    }
+
     async function onInspectClick() {
       try {
         await inspectRun();
@@ -1955,6 +2298,11 @@ __MODE_FILTER_OPTIONS__
     });
     byId("inspect_btn").addEventListener("click", onInspectClick);
     byId("refresh_runs_btn").addEventListener("click", onRefreshRunsClick);
+    byId("profile_btn").addEventListener("click", () => {
+      runDatasetProfile().catch((err) => {
+        setNotice(byId("profile_notice"), "error", String(err && err.message ? err.message : err));
+      });
+    });
 
     byId("preset_pair_btn").addEventListener("click", () => {
       applyPreset("paired_nooption_singlex", "pair_baseline");
@@ -2053,6 +2401,7 @@ __MODE_FILTER_OPTIONS__
     updateCompareExportButtons();
 
     refreshHealth();
+    loadDatasetDefaultCandidate();
     refreshRuns();
     setInterval(() => {
       tickAutoRefresh().catch((err) => {
