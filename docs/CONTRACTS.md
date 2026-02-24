@@ -110,6 +110,7 @@ Reference implementation:
 - `regspec_machine/api.py` (`create_app`)
 
 Endpoints:
+- `GET /runs`: snapshot list (`state`/`limit` query)
 - `POST /runs`: submit run request contract (supports idempotency key and optional async dispatch)
 - `GET /runs/{run_id}`: current status contract
 - `GET /runs/{run_id}/result`: result contract (202 while pending)
@@ -117,3 +118,4 @@ Endpoints:
 - `POST /runs/{run_id}/cancel`: transition queued/running run to cancelled
 - `POST /runs/{run_id}/retry`: retry failed/cancelled run (attempt bounded)
 - `GET /runs/{run_id}/artifacts`: artifact manifest + resolved path existence checks
+- `GET /ui`: browser console page for L5 operational workflow

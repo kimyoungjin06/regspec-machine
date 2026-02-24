@@ -183,3 +183,41 @@ def test_api_rejects_invalid_payload() -> None:
     assert bad.status_code == 422
     assert "mode must be one of" in str(bad.json()["detail"])
 
+
+def test_api_list_runs_endpoint_returns_rows() -> None:
+    orch = RunOrchestrator(engine=_FakeEngine(states=[]))
+    app = create_app(orchestrator=orch)
+    client = TestClient(app)
+
+    client.post(
+        "/runs?execute=false",
+        json={"mode": "singlex_baseline", "run_id": "ut_api_list_1"},
+    )
+    client.post(
+        "/runs?execute=false",
+        json={"mode": "nooption_baseline", "run_id": "ut_api_list_2"},
+    )
+    listed = client.get("/runs")
+    assert listed.status_code == 200
+    payload = listed.json()
+    assert "rows" in payload
+    assert payload["total_rows"] >= 2
+    run_ids = {row["run_id"] for row in payload["rows"]}
+    assert "ut_api_list_1" in run_ids
+    assert "ut_api_list_2" in run_ids
+
+    queued_only = client.get("/runs?state=queued")
+    assert queued_only.status_code == 200
+    for row in queued_only.json()["rows"]:
+        assert row["state"] == "queued"
+
+
+def test_api_ui_endpoint_serves_html_console() -> None:
+    orch = RunOrchestrator(engine=_FakeEngine(states=[]))
+    app = create_app(orchestrator=orch)
+    client = TestClient(app)
+
+    resp = client.get("/ui")
+    assert resp.status_code == 200
+    assert "RegSpec-Machine Console" in resp.text
+    assert "/runs" in resp.text

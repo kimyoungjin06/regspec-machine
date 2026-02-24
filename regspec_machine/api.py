@@ -9,9 +9,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional
 
-from .contracts import RunRequestContract
+from .contracts import RUN_MODES, RunRequestContract
 from .engine import PresetEngine
 from .orchestrator import RunOrchestrator
+from .ui_page import build_ui_page_html
 
 
 def _utc_now_isoz() -> str:
@@ -60,7 +61,7 @@ def create_app(
     """Create FastAPI app for run submission and lifecycle control."""
     try:
         from fastapi import BackgroundTasks, FastAPI, HTTPException, Query
-        from fastapi.responses import JSONResponse
+        from fastapi.responses import HTMLResponse, JSONResponse
     except Exception as exc:
         raise RuntimeError(
             "FastAPI dependencies are missing. Install with: pip install 'regspec-machine[api]'"
@@ -92,6 +93,43 @@ def create_app(
             "ok": True,
             "timestamp_utc": _utc_now_isoz(),
             "run_count": len(orch.list_snapshots()),
+        }
+
+    @app.get("/runs")
+    def list_runs(
+        state: str = Query(default=""),
+        limit: int = Query(default=200, ge=1, le=1000),
+    ) -> Dict[str, Any]:
+        rows = orch.list_snapshots(state=state)
+        rows_sorted = sorted(
+            rows,
+            key=lambda row: str(row.status.updated_at_utc),
+            reverse=True,
+        )
+        payload_rows = []
+        for row in rows_sorted[: int(limit)]:
+            result_counts = row.result.counts if row.result is not None else {}
+            payload_rows.append(
+                {
+                    "run_id": row.request.run_id,
+                    "mode": row.request.mode,
+                    "state": row.status.state,
+                    "attempt": int(row.status.attempt),
+                    "created_at_utc": row.status.created_at_utc,
+                    "updated_at_utc": row.status.updated_at_utc,
+                    "progress_stage": row.status.progress_stage,
+                    "progress_message": row.status.progress_message,
+                    "progress_fraction": row.status.progress_fraction,
+                    "returncode": row.returncode,
+                    "has_result": row.result is not None,
+                    "counts": result_counts,
+                }
+            )
+        return {
+            "state_filter": str(state).strip(),
+            "rows": payload_rows,
+            "total_rows": len(payload_rows),
+            "allowed_modes": list(RUN_MODES),
         }
 
     @app.post("/runs", status_code=202)
@@ -223,5 +261,9 @@ def create_app(
             "resolved_artifacts": resolved_map,
             "artifact_exists": existing_map,
         }
+
+    @app.get("/ui", response_class=HTMLResponse)
+    def ui_index() -> HTMLResponse:
+        return HTMLResponse(content=build_ui_page_html(run_modes=RUN_MODES), status_code=200)
 
     return app

@@ -156,6 +156,7 @@ python -m uvicorn regspec_machine.api:create_app --factory --host 127.0.0.1 --po
 ```
 
 Main endpoints:
+- `GET /runs` (list snapshots; query: `state`, `limit`)
 - `POST /runs` (submit; query params: `execute=true|false`, `dry_run=true|false`)
 - `GET /runs/{run_id}` (status)
 - `GET /runs/{run_id}/result` (result)
@@ -163,6 +164,7 @@ Main endpoints:
 - `POST /runs/{run_id}/cancel` (cancel queued/running)
 - `POST /runs/{run_id}/retry` (retry failed/cancelled)
 - `GET /runs/{run_id}/artifacts` (artifact manifest + existence checks)
+- `GET /ui` (L5 browser console: submit + monitor + summary inspect)
 
 `load_and_prepare_data()` maps outcomes as:
 - `y_all` from `reference_dik`

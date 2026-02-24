@@ -26,12 +26,14 @@ from .orchestrator import ExecutionEngine, RunOrchestrator, RunSnapshot
 from .shortlist import select_shortlist_features_from_top_models
 from .splitter import apply_policy_split_file, assign_policy_document_holdout
 from .search_engine import ScanConfig, run_key_factor_scan
+from .ui_page import build_ui_page_html
 
 __all__ = [
     "CommandResult",
     "EngineExecution",
     "NONCONFIRMATORY_MAX_TIERS",
     "create_app",
+    "build_ui_page_html",
     "PresetEngine",
     "ExecutionEngine",
     "REQUIRED_COLUMNS",
