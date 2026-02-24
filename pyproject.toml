@@ -26,6 +26,9 @@ api = [
   "uvicorn>=0.29",
 ]
 
+[project.scripts]
+regspec-console = "regspec_machine.launcher:main"
+
 [tool.setuptools.packages.find]
 include = ["regspec_machine*"]
 

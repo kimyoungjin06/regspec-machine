@@ -166,6 +166,26 @@ Main endpoints:
 - `GET /runs/{run_id}/artifacts` (artifact manifest + existence checks)
 - `GET /ui` (L5 browser console: submit + monitor + summary inspect)
 
+## Local Console Launcher (L6.1)
+
+Install once:
+
+```bash
+python -m pip install -e .[api]
+```
+
+Run:
+
+```bash
+regspec-console --workspace-root /path/to/TwinPaper --open-browser
+```
+
+Portable fallback (if script entrypoint is not on PATH):
+
+```bash
+python -m regspec_machine.launcher --workspace-root /path/to/TwinPaper --open-browser
+```
+
 `load_and_prepare_data()` maps outcomes as:
 - `y_all` from `reference_dik`
 - `y_evidence` from `reference_dik_evidence_use`

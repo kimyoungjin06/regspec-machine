@@ -22,6 +22,7 @@ from .contracts import (
 from .api import create_app
 from .engine import CommandResult, EngineExecution, PresetEngine
 from .feature_registry import build_feature_registry, load_feature_registry
+from .launcher import ConsoleLaunchConfig, build_parser, main, parse_args
 from .orchestrator import ExecutionEngine, RunOrchestrator, RunSnapshot
 from .shortlist import select_shortlist_features_from_top_models
 from .splitter import apply_policy_split_file, assign_policy_document_holdout
@@ -34,6 +35,10 @@ __all__ = [
     "NONCONFIRMATORY_MAX_TIERS",
     "create_app",
     "build_ui_page_html",
+    "ConsoleLaunchConfig",
+    "build_parser",
+    "parse_args",
+    "main",
     "PresetEngine",
     "ExecutionEngine",
     "REQUIRED_COLUMNS",
