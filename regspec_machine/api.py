@@ -92,6 +92,17 @@ def _extract_review_metrics(*, workspace_root: Path, artifacts: Mapping[str, str
         with top_inf_path.open("r", encoding="utf-8", newline="") as fh:
             reader = csv.DictReader(fh)
             for row in reader:
+                status_validation = str(row.get("status_validation", "")).strip().lower()
+                has_status_validation = str(row.get("status_validation", "")).strip() != ""
+                is_validation_ok = (not has_status_validation) or status_validation in {
+                    "ok",
+                    "pass",
+                    "passed",
+                    "success",
+                }
+                if not is_validation_ok:
+                    continue
+
                 tier = str(row.get("candidate_tier", "")).strip().lower()
                 if tier == "validated_candidate":
                     validated_candidate_count += 1

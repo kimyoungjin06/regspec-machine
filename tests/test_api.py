@@ -343,3 +343,86 @@ def test_api_review_endpoint_extracts_core_metrics(tmp_path: Path) -> None:
     assert governance["candidate_pool_locked_pre_validation_true"] is True
     assert governance["track_consensus_enforced"] is True
     assert governance["track_consensus_demoted_rows"] == 1
+
+
+def test_api_review_endpoint_ignores_non_ok_validation_rows(tmp_path: Path) -> None:
+    class _ReviewStatusEngine:
+        def __init__(self, workspace_root: Path) -> None:
+            self.workspace_root = workspace_root
+
+        def execute(self, request: RunRequestContract, *, dry_run: bool = False) -> EngineExecution:
+            top_rel = f"outputs/tables/{request.run_id}_top_inference.csv"
+            rst_rel = f"data/metadata/{request.run_id}_restart.csv"
+            top_path = self.workspace_root / top_rel
+            rst_path = self.workspace_root / rst_rel
+            top_path.parent.mkdir(parents=True, exist_ok=True)
+            rst_path.parent.mkdir(parents=True, exist_ok=True)
+            top_path.write_text(
+                "\n".join(
+                    [
+                        "candidate_id,candidate_tier,p_boot_validation,q_value_validation,status_validation,track",
+                        "bad_row,validated_candidate,0.0001,0.0002,failed,primary_strict",
+                        "good_row,support_candidate,0.05,0.10,ok,primary_strict",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            rst_path.write_text(
+                "\n".join(
+                    [
+                        "candidate_id,validated_rate,support_or_better_rate",
+                        "good_row,0.4,0.9",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            status = RunStatusContract.create(
+                run_id=request.run_id,
+                mode=request.mode,
+                state="succeeded",
+                progress_stage="completed",
+                progress_message="done",
+                progress_fraction=1.0,
+            )
+            result = RunResultContract.create(
+                run_id=request.run_id,
+                mode=request.mode,
+                state="succeeded",
+                artifacts=RunArtifactsContract(
+                    top_models_inference_csv=top_rel,
+                    restart_stability_csv=rst_rel,
+                ),
+                governance_checks={
+                    "search_governance": {
+                        "validation_used_for_search": False,
+                        "candidate_pool_locked_pre_validation": True,
+                    }
+                },
+            )
+            return EngineExecution(
+                request=request,
+                command=("fake", request.mode),
+                returncode=0,
+                status=status,
+                result=result,
+                stdout="ok",
+                stderr="",
+            )
+
+    orch = RunOrchestrator(engine=_ReviewStatusEngine(workspace_root=tmp_path))
+    app = create_app(orchestrator=orch)
+    client = TestClient(app)
+    client.post(
+        "/runs?execute=false",
+        json={"mode": "singlex_baseline", "run_id": "ut_api_review_status_filter"},
+    )
+    orch.execute("ut_api_review_status_filter")
+    review = client.get("/runs/ut_api_review_status_filter/review")
+    assert review.status_code == 200
+    metrics = review.json()["review"]["metrics"]
+    assert metrics["validated_candidate_count"] == 0
+    assert metrics["support_candidate_count"] == 1
+    assert metrics["best_p_validation"] == 0.05
+    assert metrics["best_q_validation"] == 0.10
