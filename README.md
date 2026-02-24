@@ -195,6 +195,25 @@ Portable fallback (if script entrypoint is not on PATH):
 python -m regspec_machine.launcher --workspace-root /path/to/TwinPaper --open-browser
 ```
 
+## Desktop Wrapper PoC (L6.2)
+
+Install desktop extras:
+
+```bash
+python -m pip install -e .[api,desktop]
+```
+
+Run native-window first (fallback to browser if `pywebview` unavailable):
+
+```bash
+regspec-desktop --workspace-root /path/to/TwinPaper
+```
+
+Useful options:
+- `--title "RegSpec-Machine"`
+- `--width 1400 --height 900`
+- `--host 127.0.0.1 --port 8000`
+
 `load_and_prepare_data()` maps outcomes as:
 - `y_all` from `reference_dik`
 - `y_evidence` from `reference_dik_evidence_use`

@@ -24,6 +24,7 @@
 - `create_app()`: L4 FastAPI service layer exposing submit/status/result/cancel/artifacts endpoints (`api.py`)
 - `build_ui_page_html()`: L5 operator UI page rendered at `/ui` for run submit/monitor/review (`ui_page.py`)
 - `regspec-console`: L6.1 local launcher entrypoint for cross-OS operator startup (`launcher.py`)
+- `regspec-desktop`: L6.2 desktop wrapper PoC (`desktop.py`, pywebview-first with browser fallback)
 
 ## Non-goals
 

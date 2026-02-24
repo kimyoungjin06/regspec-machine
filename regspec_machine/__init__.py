@@ -20,6 +20,7 @@ from .contracts import (
     RunStatusContract,
 )
 from .api import create_app
+from .desktop import DesktopLaunchConfig, build_desktop_parser, parse_desktop_args
 from .engine import CommandResult, EngineExecution, PresetEngine
 from .feature_registry import build_feature_registry, load_feature_registry
 from .launcher import ConsoleLaunchConfig, build_parser, main, parse_args
@@ -34,6 +35,9 @@ __all__ = [
     "EngineExecution",
     "NONCONFIRMATORY_MAX_TIERS",
     "create_app",
+    "DesktopLaunchConfig",
+    "build_desktop_parser",
+    "parse_desktop_args",
     "build_ui_page_html",
     "ConsoleLaunchConfig",
     "build_parser",

@@ -25,9 +25,13 @@ api = [
   "fastapi>=0.110",
   "uvicorn>=0.29",
 ]
+desktop = [
+  "pywebview>=4.4",
+]
 
 [project.scripts]
 regspec-console = "regspec_machine.launcher:main"
+regspec-desktop = "regspec_machine.desktop:main"
 
 [tool.setuptools.packages.find]
 include = ["regspec_machine*"]
