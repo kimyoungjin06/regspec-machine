@@ -65,6 +65,12 @@ python -m pip install -e .[test]
 python -m pytest -q
 ```
 
+L7 parity/governance regression focus:
+
+```bash
+python -m pytest -q tests/test_parity_l2_l3_l4.py
+```
+
 ## Quick start (Python API)
 
 ```python

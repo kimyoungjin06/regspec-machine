@@ -29,3 +29,8 @@
 
 - This package is not a full end-user CLI by itself.
 - It does not replace confirmatory analysis plans; outputs are support-only unless explicitly promoted by a separate confirmatory protocol.
+
+## L7 Regression Gate
+
+- `tests/test_parity_l2_l3_l4.py` verifies same-input parity for L2/L3/L4 (`succeeded` and `failed` paths).
+- Governance payload parity is enforced for `search_governance.validation_used_for_search=false` and `candidate_pool_locked_pre_validation=true`.
