@@ -40,10 +40,22 @@ Direction-review order (mandatory):
 - `tests/`: smoke tests for split/summary behavior
 - `*.py` at repository root: legacy compatibility wrappers for old import paths
 
+Execution contracts for upcoming API/UI work:
+- `docs/CONTRACTS.md`
+- `regspec_machine/contracts.py`
+- `regspec_machine/engine.py` (L2 facade: request -> execute -> status/result)
+- `regspec_machine/orchestrator.py` (L3 lifecycle manager: submit/execute/retry/cancel)
+
 ## Install (editable)
 
 ```bash
 python -m pip install -e .
+```
+
+Install API extras (FastAPI/uvicorn):
+
+```bash
+python -m pip install -e .[api]
 ```
 
 ## Test (dev)
@@ -52,6 +64,16 @@ python -m pip install -e .
 python -m pip install -e .[test]
 python -m pytest -q
 ```
+
+L7 parity/governance regression focus:
+
+```bash
+python -m pytest -q tests/test_parity_l2_l3_l4.py
+```
+
+CI:
+- GitHub Actions runs `python -m pytest -q` on push/PR (`.github/workflows/ci.yml`)
+- CI also runs `regspec-build-desktop` smoke build on `ubuntu/windows/macos` matrix and uploads OS-specific manifest artifacts.
 
 ## Quick start (Python API)
 
@@ -92,6 +114,132 @@ config = ScanConfig(
 )
 scan_rows, top_rows, search_log = run_key_factor_scan(df=data, feature_registry=feature_registry, config=config)
 ```
+
+## Programmatic preset execution (L2 facade)
+
+```python
+from regspec_machine import PresetEngine, RunRequestContract
+
+engine = PresetEngine(workspace_root="/path/to/TwinPaper")
+request = RunRequestContract.from_payload(
+    {
+        "mode": "paired_nooption_singlex",
+        "run_id": "phase_b_pair_example_20260224",
+        "scan_n_bootstrap": 49,
+    }
+)
+execution = engine.execute(request)
+print(execution.status.state)
+print(execution.result.governance_checks)
+```
+
+Shortcut wrappers (baseline defaults):
+- `engine.run_nooption(run_id=...)` -> `nooption_baseline`
+- `engine.run_singlex(run_id=...)` -> `singlex_baseline`
+- `engine.run_paired(run_id=...)` -> `paired_nooption_singlex`
+
+## Programmatic workflow orchestration (L3)
+
+```python
+from regspec_machine import PresetEngine, RunOrchestrator
+
+engine = PresetEngine(workspace_root="/path/to/TwinPaper")
+orch = RunOrchestrator(engine=engine, max_attempts=2)
+
+status = orch.submit({"mode": "paired_nooption_singlex", "run_id": "phase_b_pair_l3_example"})
+execution = orch.execute(status.run_id)
+print(execution.status.state)
+```
+
+## Service API (L4 FastAPI)
+
+```python
+from regspec_machine import create_app
+
+app = create_app(workspace_root="/path/to/TwinPaper")
+```
+
+Run server:
+
+```bash
+python -m uvicorn regspec_machine.api:create_app --factory --host 127.0.0.1 --port 8000
+```
+
+Main endpoints:
+- `GET /runs` (list snapshots; query: `state`, `limit`)
+- `POST /runs` (submit; query params: `execute=true|false`, `dry_run=true|false`)
+- `GET /runs/{run_id}` (status)
+- `GET /runs/{run_id}/result` (result)
+- `GET /runs/{run_id}/summary` (compact result view)
+- `GET /runs/{run_id}/review` (core review panel: `validated/p/q/restart/consensus`)
+- `POST /runs/{run_id}/cancel` (cancel queued/running)
+- `POST /runs/{run_id}/retry` (retry failed/cancelled)
+- `GET /runs/{run_id}/artifacts` (artifact manifest + existence checks)
+- `GET /ui` (L5 browser console: submit + monitor + summary inspect)
+  - run detail panel includes quick KPI cards (`validated`, `best p/q`, `restart`, leakage guard, consensus)
+
+## Local Console Launcher (L6.1)
+
+Install once:
+
+```bash
+python -m pip install -e .[api]
+```
+
+Run:
+
+```bash
+regspec-console --workspace-root /path/to/TwinPaper --open-browser
+```
+
+Portable fallback (if script entrypoint is not on PATH):
+
+```bash
+python -m regspec_machine.launcher --workspace-root /path/to/TwinPaper --open-browser
+```
+
+Export `/ui` as static HTML:
+
+```bash
+regspec-console --out-ui-html ./artifacts/regspec_console_ui.html --ui-html-only
+```
+
+If you also want to start server, omit `--ui-html-only`.
+
+## Desktop Wrapper PoC (L6.2)
+
+Install desktop extras:
+
+```bash
+python -m pip install -e .[api,desktop]
+```
+
+Run native-window first (fallback to browser if `pywebview` unavailable):
+
+```bash
+regspec-desktop --workspace-root /path/to/TwinPaper
+```
+
+Useful options:
+- `--title "RegSpec-Machine"`
+- `--width 1400 --height 900`
+- `--host 127.0.0.1 --port 8000`
+
+Build desktop executable (PyInstaller):
+
+```bash
+python -m pip install -e .[build]
+regspec-build-desktop --project-root /path/to/regspec-machine
+```
+
+One-file windowed build:
+
+```bash
+regspec-build-desktop --project-root /path/to/regspec-machine --onefile --windowed
+```
+
+Bundle manifest is written by default to:
+- `build/dist/regspec-desktop_bundle_manifest.json`
 
 `load_and_prepare_data()` maps outcomes as:
 - `y_all` from `reference_dik`
@@ -240,7 +388,7 @@ cd /home/kimyoungjin06/Desktop/Workspace/1.2.8.TwinPaper
 ```
 
 Modes:
-- `paired_nooption_singlex`: run `nooption_baseline` then `singlex_baseline` in one command, and auto-write a direction-review JSON (`validated/p/q/restart-stability/singlex consensus`)
+- `paired_nooption_singlex`: run `nooption_baseline` then `singlex_baseline` in one command, auto-align both branches to `y_all` context by default, and auto-write a direction-review JSON (`validated/p/q/restart-stability/singlex consensus + promotion gates`)
 - `paired_nooption_singlex_hypothesis`: run `nooption_hypothesis_panel` then `singlex_hypothesis_panel` (windowed hypothesis panel: `y_3y,y_5y,y_10y`), and auto-write the same direction-review JSON
 - `nooption`: minimal runner path without exploration shortcuts
 - `nooption_baseline`: nooption path with governance baseline (`n_restarts=5`, auto y-gate scaling, fail on unusable Y, skip discovery-infeasible track×Y blocks, auto-disable plus-base spec under low discovery capacity)
@@ -259,6 +407,8 @@ Useful overrides:
 - `--out-direction-review-json <path>` (for paired modes, writes automated direction-review summary JSON)
 - `--skip-direction-review` (for paired modes, disables auto direction-review summary generation)
 - `--paired-legacy-sync-validation` (for `paired_nooption_singlex`, forwards `--legacy-single-gate-sync-validation` to child runner calls)
+- `--paired-y-context-alignment y_all_only|off` (default `y_all_only`; paired baseline only)
+- `--no-paired-run-singlex-on-nooption-failure` (default behavior is to run `singlex` even if `nooption` fails)
 - `--hypothesis-window-years 3,5,10` (for `*_hypothesis_panel` modes; forwarded in paired hypothesis mode)
 - `--hypothesis-confirmatory-window-years 3,5` (default for `*_hypothesis_panel`; avoids redundant confirmatory `y_10y` in current dataset)
 - `--hypothesis-time-series-precheck-mode fail_redundant_confirmatory` (default for `*_hypothesis_panel`; fail-fast only on redundant confirmatory windows)
@@ -300,6 +450,10 @@ cd /home/kimyoungjin06/Desktop/Workspace/1.2.8.TwinPaper
 
 Default direction-review output is:
 - `data/metadata/phase_b_bikard_machine_scientist_direction_review_<run_id>.json`
+
+Primary checks now include:
+- execution checks: `all_children_ok`, `required_fields_present`, `singlex_track_consensus_check_pass`
+- promotion checks: `nooption_primary_validated_gate_pass`, `nooption_q_gate_pass`, `nooption_restart_validated_rate_gate_pass`, `nooption_promotion_gate_pass`, `primary_objective_gate_pass`
 
 ## Recommended paired hypothesis panel (TwinPaper)
 

@@ -68,6 +68,28 @@ def test_paired_summary_helpers(tmp_path: Path) -> None:
     assert '"status": "ok"' in text
 
 
+def test_paired_yall_context_path_and_payload(tmp_path: Path) -> None:
+    root = _root()
+    preset = _load_module(
+        root / "scripts" / "modeling" / "run_phase_b_regspec_preset.py",
+        "phase_b_preset_module_paired_yall_contexts",
+    )
+
+    yctx_path = preset._resolve_paired_yall_contexts_path("paired baseline unit test")
+    assert yctx_path.name.startswith("phase_b_bikard_machine_scientist_y_contexts_paired_yall_only_")
+    assert yctx_path.suffix == ".json"
+
+    out = tmp_path / "paired_yall_contexts.json"
+    preset._write_yall_only_contexts(
+        out,
+        "ut",
+        source="preset_paired_nooption_singlex",
+    )
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["meta"]["source"] == "preset_paired_nooption_singlex"
+    assert payload["contexts"] == [{"context_scope": "all_contexts", "y_col": "y_all"}]
+
+
 def test_paired_child_outputs_contract() -> None:
     root = _root()
     preset = _load_module(
@@ -265,6 +287,8 @@ def test_direction_review_payload_extracts_pq_restart_and_consensus(tmp_path: Pa
     assert review["checks"]["all_children_ok"] is True
     assert review["checks"]["required_fields_present"] is True
     assert review["checks"]["singlex_track_consensus_check_pass"] is True
+    assert review["checks"]["nooption_promotion_gate_pass"] is False
+    assert review["checks"]["primary_objective_gate_pass"] is False
     assert review["comparison"]["nooption_best_p_validation"] == pytest.approx(0.04)
     assert review["comparison"]["singlex_best_q_validation"] == pytest.approx(0.28)
     assert review["comparison"]["singlex_restart_max_validated_rate"] == pytest.approx(0.0)
@@ -302,6 +326,168 @@ def test_direction_review_payload_marks_required_fields_false_when_no_ok_childre
     assert review["checks"]["all_children_ok"] is False
     assert review["checks"]["required_fields_present"] is False
     assert review["checks"]["singlex_track_consensus_check_pass"] is False
+    assert review["checks"]["primary_objective_gate_pass"] is False
+
+
+def test_extract_top_models_metrics_best_candidate_uses_validation_ok_rows(tmp_path: Path) -> None:
+    root = _root()
+    preset = _load_module(
+        root / "scripts" / "modeling" / "run_phase_b_regspec_preset.py",
+        "phase_b_preset_module_top_models_ok_filter",
+    )
+
+    top_inf = tmp_path / "top_inf.csv"
+    top_inf.write_text(
+        "\n".join(
+            [
+                "run_id,candidate_id,track,y_col,status_validation,p_boot_validation,q_value_validation,candidate_tier",
+                "ut,cand_bad,sensitivity_broad_company_no_edu,y_all,not_validated_out_of_sample,0.001,0.001,validated_candidate",
+                "ut,cand_good,primary_strict,y_all,ok,0.050,0.090,support_candidate",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    metrics = preset._extract_top_models_metrics(top_inf)
+    assert metrics["min_p_validation"] == pytest.approx(0.05)
+    assert metrics["min_q_validation"] == pytest.approx(0.09)
+    assert metrics["best_candidate_id"] == "cand_good"
+    assert metrics["best_candidate_track"] == "primary_strict"
+
+
+def test_direction_review_primary_objective_gate_turns_true(tmp_path: Path) -> None:
+    root = _root()
+    preset = _load_module(
+        root / "scripts" / "modeling" / "run_phase_b_regspec_preset.py",
+        "phase_b_preset_module_primary_objective_gate",
+    )
+
+    top_inf_nooption = tmp_path / "top_inf_nooption_primary_ok.csv"
+    top_inf_nooption.write_text(
+        "\n".join(
+            [
+                "run_id,candidate_id,track,y_col,status_validation,p_boot_validation,q_value_validation,candidate_tier",
+                "ut,noopt_primary_valid,primary_strict,y_all,ok,0.010,0.030,validated_candidate",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    top_inf_singlex = tmp_path / "top_inf_singlex_support.csv"
+    top_inf_singlex.write_text(
+        "\n".join(
+            [
+                "run_id,candidate_id,track,y_col,status_validation,p_boot_validation,q_value_validation,candidate_tier",
+                "ut,singlex_support,primary_strict,y_all,ok,0.220,0.220,support_candidate",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    rst_nooption = tmp_path / "rst_nooption_primary_ok.csv"
+    rst_nooption.write_text(
+        "\n".join(
+            [
+                "candidate_id,validated_rate,support_or_better_rate",
+                "noopt_primary_valid,1.0,1.0",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    rst_singlex = tmp_path / "rst_singlex_support.csv"
+    rst_singlex.write_text(
+        "\n".join(
+            [
+                "candidate_id,validated_rate,support_or_better_rate",
+                "singlex_support,0.0,1.0",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    run_summary_nooption = tmp_path / "run_summary_nooption_primary_ok.json"
+    run_summary_nooption.write_text(
+        json.dumps(
+            {
+                "counts": {
+                    "scan_rows": 50,
+                    "top_rows": 20,
+                    "top_rows_inference": 1,
+                    "candidate_tier_top_rows_inference": {
+                        "validated_candidate": 1,
+                        "support_candidate": 0,
+                        "exploratory": 0,
+                    },
+                },
+                "outputs": {
+                    "top_models_inference_csv": str(top_inf_nooption),
+                    "restart_stability_csv": str(rst_nooption),
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    run_summary_singlex = tmp_path / "run_summary_singlex_support.json"
+    run_summary_singlex.write_text(
+        json.dumps(
+            {
+                "counts": {
+                    "scan_rows": 16,
+                    "top_rows": 8,
+                    "top_rows_inference": 1,
+                    "candidate_tier_top_rows_inference": {
+                        "validated_candidate": 0,
+                        "support_candidate": 1,
+                        "exploratory": 0,
+                    },
+                },
+                "outputs": {
+                    "top_models_inference_csv": str(top_inf_singlex),
+                    "restart_stability_csv": str(rst_singlex),
+                },
+                "track_consensus_meta": {
+                    "enforce_track_consensus": True,
+                    "n_rows_demoted_from_validated": 0,
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    pair_payload = {
+        "mode": "paired_nooption_singlex",
+        "run_id": "ut_pair_primary_objective_gate",
+        "status": "ok",
+        "children": [
+            {
+                "mode": "nooption_baseline",
+                "run_id": "ut_pair_primary_objective_gate__nooption_baseline",
+                "status": "ok",
+                "returncode": 0,
+                "outputs": {"run_summary_json": str(run_summary_nooption)},
+            },
+            {
+                "mode": "singlex_baseline",
+                "run_id": "ut_pair_primary_objective_gate__singlex",
+                "status": "ok",
+                "returncode": 0,
+                "outputs": {"run_summary_json": str(run_summary_singlex)},
+            },
+        ],
+    }
+    review = preset._build_direction_review_payload(pair_payload)
+    assert review["checks"]["all_children_ok"] is True
+    assert review["checks"]["required_fields_present"] is True
+    assert review["checks"]["singlex_track_consensus_check_pass"] is True
+    assert review["checks"]["nooption_primary_validated_gate_pass"] is True
+    assert review["checks"]["nooption_q_gate_pass"] is True
+    assert review["checks"]["nooption_restart_validated_rate_gate_pass"] is True
+    assert review["checks"]["nooption_promotion_gate_pass"] is True
+    assert review["checks"]["primary_objective_gate_pass"] is True
 
 
 def test_dashboard_prefers_child_declared_run_summary_path(tmp_path: Path) -> None:

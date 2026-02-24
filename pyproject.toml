@@ -16,7 +16,26 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-test = ["pytest>=7.4"]
+test = [
+  "pytest>=7.4",
+  "fastapi>=0.110",
+  "httpx>=0.27",
+]
+api = [
+  "fastapi>=0.110",
+  "uvicorn>=0.29",
+]
+desktop = [
+  "pywebview>=4.4",
+]
+build = [
+  "pyinstaller>=6.0",
+]
+
+[project.scripts]
+regspec-console = "regspec_machine.launcher:main"
+regspec-desktop = "regspec_machine.desktop:main"
+regspec-build-desktop = "regspec_machine.bundle:main"
 
 [tool.setuptools.packages.find]
 include = ["regspec_machine*"]
