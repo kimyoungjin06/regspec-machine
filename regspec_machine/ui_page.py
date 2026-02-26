@@ -53,6 +53,41 @@ def build_ui_page_html(*, run_modes: Iterable[str]) -> str:
       max-width: 1240px;
       margin: 0 auto;
       padding: 18px;
+      display: flex;
+      flex-direction: column;
+    }
+    #section_quick_start { order: 10; }
+    #section_load_previous { order: 20; }
+    #section_console_nav { order: 30; }
+    #section_explorer_sweep { order: 40; }
+    #section_run_monitor { order: 50; }
+    #section_run_workspace { order: 60; }
+    #section_baseline_compare { order: 70; }
+    #section_saved_reports { order: 80; }
+    #section_dataset_explorer { order: 90; }
+    #card_run_details { order: 1; }
+    #card_run_submit { order: 2; }
+    #section_run_workspace {
+      grid-template-columns: 1fr;
+    }
+    #card_run_details,
+    #card_run_submit {
+      grid-column: 1 / -1;
+    }
+    .nav-card .toolbar {
+      gap: 8px;
+      margin-top: 0;
+    }
+    .nav-badge {
+      display: inline-block;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: #f1f7ff;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      margin-right: 6px;
     }
     .header {
       border: 1px solid var(--line);
@@ -430,28 +465,61 @@ def build_ui_page_html(*, run_modes: Iterable[str]) -> str:
       font-family: "Space Grotesk", "IBM Plex Sans", sans-serif;
       color: var(--ink);
     }
+    .hidden {
+      display: none !important;
+    }
+    .fold-card {
+      padding: 0 !important;
+      overflow: hidden;
+    }
+    .fold-card > summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 8px 10px;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--ink);
+      background: #f3f8ff;
+      border-bottom: 1px solid transparent;
+      user-select: none;
+    }
+    .fold-card > summary::-webkit-details-marker {
+      display: none;
+    }
+    .fold-card[open] > summary {
+      border-bottom-color: var(--line);
+    }
+    .fold-card .fold-body {
+      padding: 6px;
+    }
     .explorer-joint-grid {
-      margin-top: 10px;
+      margin-top: 8px;
       display: grid;
-      grid-template-columns: minmax(0, 1fr) 240px;
-      grid-template-rows: auto auto;
-      gap: 8px;
+      grid-template-columns: minmax(196px, 220px) minmax(420px, 560px) minmax(146px, 170px);
+      grid-template-rows: auto 1fr;
+      gap: 6px;
       align-items: stretch;
+      width: 100%;
+      justify-content: center;
+    }
+    .explorer-kpi-rail {
+      grid-column: 1;
+      grid-row: 1 / span 2;
     }
     .explorer-joint-top {
-      grid-column: 1;
-      grid-row: 1;
-    }
-    .explorer-joint-kpi {
       grid-column: 2;
       grid-row: 1;
     }
     .explorer-joint-main {
-      grid-column: 1;
+      grid-column: 2;
       grid-row: 2;
     }
+    .explorer-joint-kpi {
+      grid-column: 3;
+      grid-row: 1;
+    }
     .explorer-joint-side {
-      grid-column: 2;
+      grid-column: 3;
       grid-row: 2;
     }
     @media (max-width: 980px) {
@@ -471,7 +539,7 @@ def build_ui_page_html(*, run_modes: Iterable[str]) -> str:
       border: 1px solid var(--line);
       border-radius: 8px;
       background: #ffffff;
-      min-height: 132px;
+      min-height: 92px;
       overflow: hidden;
     }
     .marginal-wrap svg {
@@ -485,6 +553,12 @@ def build_ui_page_html(*, run_modes: Iterable[str]) -> str:
     .marginal-wrap.side svg {
       height: auto;
     }
+    .explorer-joint-top .marginal-wrap,
+    .explorer-joint-main .scatter-wrap,
+    .explorer-joint-side .marginal-wrap {
+      margin-left: 0;
+      margin-right: 0;
+    }
     .marginal-bar {
       cursor: pointer;
       transition: opacity 120ms ease, stroke-width 120ms ease;
@@ -496,23 +570,111 @@ def build_ui_page_html(*, run_modes: Iterable[str]) -> str:
     .joint-kpi-grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 6px;
+      gap: 4px;
     }
     .joint-kpi-item {
       border: 1px solid var(--line);
       border-radius: 8px;
       background: #f8fbff;
-      padding: 6px;
+      padding: 5px;
     }
     .joint-kpi-label {
-      font-size: 10px;
+      font-size: 9px;
       color: var(--muted);
-      margin-bottom: 3px;
+      margin-bottom: 2px;
     }
     .joint-kpi-value {
-      font-size: 12px;
+      font-size: 11px;
       color: var(--ink);
       font-weight: 700;
+    }
+    #section_explorer_sweep {
+      padding: 10px;
+    }
+    #section_explorer_sweep .toolbar {
+      gap: 6px;
+      margin-top: 6px;
+    }
+    #section_explorer_sweep .notice,
+    #section_explorer_sweep .hint-box {
+      margin-top: 6px;
+      padding: 6px 8px;
+      font-size: 11px;
+    }
+    #section_explorer_sweep .viz-card {
+      padding: 6px;
+      border-radius: 9px;
+    }
+    #section_explorer_sweep .viz-card h3 {
+      margin: 0 0 4px;
+      font-size: 11px;
+    }
+    #section_explorer_sweep #explorer_kpi_cards {
+      margin-top: 0;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 6px;
+    }
+    #section_explorer_sweep .explorer-kpi-rail .kpi-card {
+      display: block;
+      padding: 7px 8px;
+      min-height: 50px;
+    }
+    #section_explorer_sweep .explorer-kpi-rail .kpi-label {
+      margin-bottom: 3px;
+      white-space: normal;
+      font-size: 10px;
+    }
+    #section_explorer_sweep .explorer-kpi-rail .kpi-value {
+      font-size: 16px;
+      line-height: 1.1;
+      text-align: left;
+    }
+    #section_explorer_sweep .kpi-card {
+      padding: 6px;
+    }
+    #section_explorer_sweep .kpi-label {
+      font-size: 10px;
+      margin-bottom: 2px;
+    }
+    #section_explorer_sweep .kpi-value {
+      font-size: 14px;
+    }
+    .explorer-focus-grid {
+      margin-top: 6px;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 6px;
+      align-items: stretch;
+    }
+    .explorer-focus-snapshot {
+      margin-top: 6px;
+    }
+    .explorer-table-fold {
+      margin-top: 8px;
+    }
+    @media (max-width: 980px) {
+      .explorer-focus-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+    @media (max-width: 640px) {
+      #section_explorer_sweep #explorer_kpi_cards {
+        grid-template-columns: 1fr;
+      }
+    }
+    .focus-row-selected td {
+      background: #eef6ff;
+    }
+    .focus-clickable {
+      cursor: pointer;
+    }
+    #explorer_focus_similar_wrap table {
+      min-width: 0;
+      font-size: 11px;
+    }
+    #explorer_focus_similar_wrap th,
+    #explorer_focus_similar_wrap td {
+      padding: 6px 6px;
     }
     .viz-card-wide {
       grid-column: 1 / -1;
@@ -554,8 +716,8 @@ def build_ui_page_html(*, run_modes: Iterable[str]) -> str:
       border: 1px solid var(--line);
       border-radius: 8px;
       background: #ffffff;
-      min-height: 0;
-      aspect-ratio: 1 / 1;
+      min-height: 220px;
+      width: 100%;
       max-width: 100%;
       overflow: hidden;
     }
@@ -563,6 +725,13 @@ def build_ui_page_html(*, run_modes: Iterable[str]) -> str:
       display: block;
       width: 100%;
       height: auto;
+    }
+    .marginal-wrap .js-plotly-plot,
+    .scatter-wrap .js-plotly-plot,
+    .marginal-wrap .plot-container,
+    .scatter-wrap .plot-container {
+      width: 100% !important;
+      height: 100% !important;
     }
     .scatter-point {
       cursor: pointer;
@@ -577,6 +746,14 @@ def build_ui_page_html(*, run_modes: Iterable[str]) -> str:
       color: var(--muted);
       font-size: 12px;
       padding: 10px;
+    }
+    #explorer_best_qp_meta {
+      margin-top: 4px;
+      font-size: 11px;
+    }
+    #explorer_best_qp_hover {
+      margin-top: 4px;
+      min-height: 0;
     }
     .equation-factor-box {
       min-height: 92px;
@@ -658,7 +835,7 @@ def build_ui_page_html(*, run_modes: Iterable[str]) -> str:
       <p class="sub">Health: <span id="health_text">checking...</span></p>
     </section>
 
-    <section class="card help-card">
+    <section class="card help-card" id="section_quick_start">
       <h2>Quick Start</h2>
       <div class="help-grid">
         <div class="help-item">
@@ -676,7 +853,7 @@ def build_ui_page_html(*, run_modes: Iterable[str]) -> str:
       </div>
     </section>
 
-    <section class="card help-card">
+    <section class="card help-card" id="section_load_previous">
       <h2>Load Previous Results (Recommended)</h2>
       <div class="help-grid">
         <div class="help-item">
@@ -701,11 +878,33 @@ def build_ui_page_html(*, run_modes: Iterable[str]) -> str:
             <button id="load_prev_data_config_btn" class="ghost">Load Data Config (inputs only)</button>
           </div>
         </div>
+        <div class="help-item">
+          <h3>Path D: One-Click Resume</h3>
+          <p>Refresh sources, load latest run/report/config, and jump to Explorer in one step.</p>
+          <div class="toolbar">
+            <button id="load_prev_resume_workspace_btn" class="secondary">Resume Latest Workspace</button>
+          </div>
+        </div>
       </div>
     </section>
 
-    <section class="grid">
-      <div class="card">
+    <section class="card nav-card" id="section_console_nav">
+      <h2>Primary Workflow</h2>
+      <div class="toolbar">
+        <button id="resume_latest_workspace_btn" class="secondary">1) Resume Latest Workspace</button>
+        <button id="nav_to_explorer_btn" class="ghost">2) Explorer Sweep</button>
+        <button id="nav_to_run_details_btn" class="ghost">3) Run Details</button>
+        <button id="nav_to_saved_reports_btn" class="ghost">Saved Reports</button>
+      </div>
+      <div id="workflow_notice" class="notice">recommended flow: resume -> explorer focus -> inspect run detail.</div>
+      <div class="hint-box">
+        <span class="nav-badge">Goal</span>
+        Find low-q/high-stability candidates quickly, then inspect evidence without losing context.
+      </div>
+    </section>
+
+    <section class="grid" id="section_run_workspace">
+      <div class="card" id="card_run_submit">
         <h2>Run Submit</h2>
         <div class="row">
           <div>
@@ -775,7 +974,7 @@ __MODE_OPTIONS__
         </details>
       </div>
 
-      <div class="card">
+      <div class="card" id="card_run_details">
         <h2>Run Details</h2>
         <div class="row">
           <div>
@@ -799,6 +998,20 @@ __MODE_FILTER_OPTIONS__
           <div>
             <label for="list_run_id_filter">run_id contains</label>
             <input id="list_run_id_filter" placeholder="optional run_id substring filter" />
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label for="quick_run_keyword">quick run keyword</label>
+            <input id="quick_run_keyword" placeholder="e.g. phase_b_pair_iter_boot299" />
+          </div>
+          <div>
+            <label>quick find action</label>
+            <div class="toolbar">
+              <button id="quick_find_latest_btn" class="ghost">Find Latest Match</button>
+              <button id="quick_find_inspect_btn" class="secondary">Find + Inspect</button>
+              <button id="quick_apply_keyword_all_btn" class="ghost">Apply to Explorer</button>
+            </div>
           </div>
         </div>
         <div class="toolbar">
@@ -844,7 +1057,7 @@ __MODE_FILTER_OPTIONS__
       </div>
     </section>
 
-    <section class="card" style="margin-top: 14px;">
+    <section class="card" style="margin-top: 14px;" id="section_baseline_compare">
       <h2>Baseline Compare (nooption vs singlex)</h2>
       <div class="row">
         <div>
@@ -885,7 +1098,7 @@ __MODE_FILTER_OPTIONS__
       </div>
     </section>
 
-    <section class="card" style="margin-top: 14px;">
+    <section class="card" style="margin-top: 14px;" id="section_saved_reports">
       <h2>Saved Reports</h2>
       <div class="row">
         <div>
@@ -920,7 +1133,7 @@ __MODE_FILTER_OPTIONS__
       </details>
     </section>
 
-    <section class="card" style="margin-top: 14px;">
+    <section class="card" style="margin-top: 14px;" id="section_dataset_explorer">
       <h2>Dataset Explorer (Question Seeder)</h2>
       <div class="row">
         <div>
@@ -1044,7 +1257,7 @@ __MODE_FILTER_OPTIONS__
       </details>
     </section>
 
-    <section class="card" style="margin-top: 14px;">
+    <section class="card" style="margin-top: 14px;" id="section_run_monitor">
       <h2>Run Monitor</h2>
       <div class="toolbar">
         <button id="runs_refresh_now_btn" class="ghost">Refresh Monitor</button>
@@ -1098,7 +1311,7 @@ __MODE_FILTER_OPTIONS__
       <div class="footer-note">Actions call API endpoints directly. Cancel/Retry follow orchestrator transition rules.</div>
     </section>
 
-    <section class="card" style="margin-top: 14px;">
+    <section class="card" style="margin-top: 14px;" id="section_explorer_sweep">
       <h2>Explorer Sweep (Across Runs)</h2>
       <div class="toolbar">
         <button id="explorer_refresh_btn" class="secondary">Refresh Explorer</button>
@@ -1122,18 +1335,82 @@ __MODE_FILTER_OPTIONS__
         </select>
       </div>
       <div id="explorer_notice" class="notice">ready</div>
-      <div class="kpi-grid" id="explorer_kpi_cards"></div>
+      <details class="viz-card fold-card" id="explorer_ux_benchmark">
+        <summary>UX Journey Benchmark (optional)</summary>
+        <div class="fold-body">
+          <div class="toolbar">
+            <button id="ux_start_btn" class="secondary">Start Journey</button>
+            <button id="ux_stop_btn" class="ghost">Stop</button>
+            <button id="ux_reset_btn" class="ghost">Reset</button>
+            <button id="ux_copy_btn" class="ghost">Copy Metrics JSON</button>
+          </div>
+          <div id="ux_notice" class="hint-box">inactive: start journey to measure click/scroll/hop cost</div>
+          <div class="run-table-wrap compact-table" style="margin-top: 6px;">
+            <table>
+              <tbody id="ux_overview_tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </details>
+      <div class="explorer-focus-grid">
+        <div class="viz-card">
+          <h3>Focus Candidate</h3>
+          <div id="explorer_focus_notice" class="hint-box">refresh Explorer to load top candidate focus</div>
+          <div class="run-table-wrap compact-table" style="margin-top: 6px;">
+            <table>
+              <tbody id="explorer_focus_tbody"></tbody>
+            </table>
+          </div>
+          <div class="toolbar">
+            <button id="explorer_focus_apply_filter_btn" class="ghost">Filter by Focus Factor</button>
+            <button id="explorer_focus_inspect_run_btn" class="ghost">Inspect Focus Run</button>
+          </div>
+        </div>
+        <div class="viz-card">
+          <h3>Similar Conditions</h3>
+          <div id="explorer_focus_similar_notice" class="hint-box">select a combo or scatter point to compare similar conditions</div>
+          <div class="run-table-wrap" id="explorer_focus_similar_wrap" style="margin-top: 6px;">
+            <table>
+              <thead>
+                <tr>
+                  <th>rank</th>
+                  <th>condition</th>
+                  <th>score</th>
+                  <th>q/p</th>
+                  <th>n_runs</th>
+                </tr>
+              </thead>
+              <tbody id="explorer_focus_similar_tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <details class="viz-card fold-card explorer-focus-snapshot" id="explorer_focus_snapshot_fold">
+        <summary>Focus Run Snapshot (optional)</summary>
+        <div class="fold-body">
+          <div id="explorer_focus_run_notice" class="hint-box">select a focus candidate and inspect to load run snapshot</div>
+          <div class="run-table-wrap compact-table" style="margin-top: 6px;">
+            <table>
+              <tbody id="explorer_focus_run_tbody"></tbody>
+            </table>
+          </div>
+          <div class="toolbar">
+            <label class="inline"><input id="explorer_focus_auto_inspect" type="checkbox" checked /> auto inspect on selection</label>
+            <label class="inline"><input id="explorer_focus_auto_jump" type="checkbox" /> jump to Run Details</label>
+          </div>
+          <div class="toolbar">
+            <button id="explorer_focus_apply_inspect_btn" class="secondary">Filter + Inspect Focus</button>
+          </div>
+        </div>
+      </details>
       <div class="explorer-joint-grid">
+        <div class="viz-card explorer-kpi-rail">
+          <h3>Sweep KPI</h3>
+          <div class="kpi-grid" id="explorer_kpi_cards"></div>
+        </div>
         <div class="viz-card explorer-joint-top">
           <h3>Best q Distribution (x-axis)</h3>
           <div id="explorer_best_q_marginal" class="marginal-wrap"></div>
-        </div>
-        <div class="viz-card explorer-joint-kpi">
-          <h3>Joint Summary</h3>
-          <div id="explorer_best_qp_joint_kpis" class="joint-kpi-grid"></div>
-          <div class="toolbar" style="margin-top:8px;">
-            <button id="explorer_joint_clear_btn" class="ghost">Clear Joint Filters</button>
-          </div>
         </div>
         <div class="viz-card explorer-joint-main">
           <h3>Best q vs Best p Scatter (run-level)</h3>
@@ -1141,68 +1418,80 @@ __MODE_FILTER_OPTIONS__
           <div id="explorer_best_qp_meta" class="footer-note">points: 0</div>
           <div id="explorer_best_qp_hover" class="hint-box">hover/click a point to inspect run-level metrics</div>
         </div>
+        <div class="viz-card explorer-joint-kpi">
+          <h3>Joint Summary</h3>
+          <div id="explorer_best_qp_joint_kpis" class="joint-kpi-grid"></div>
+          <div class="toolbar" style="margin-top:6px;">
+            <button id="explorer_joint_clear_btn" class="ghost">Clear Joint Filters</button>
+          </div>
+        </div>
         <div class="viz-card explorer-joint-side">
           <h3>Best p Distribution (y-axis)</h3>
           <div id="explorer_best_p_marginal" class="marginal-wrap side"></div>
         </div>
       </div>
-      <label>Top Combinations</label>
-      <div class="toolbar">
-        <label for="explorer_combo_filter_text" style="margin:0; align-self:center;">factor contains</label>
-        <input id="explorer_combo_filter_text" style="width:220px;" placeholder="e.g. is_academia_origin" />
-        <label for="explorer_combo_sort_key" style="margin:0; align-self:center;">sort</label>
-        <select id="explorer_combo_sort_key" style="width:auto; min-width:190px;">
-          <option value="q_best_asc" selected>q_best (low)</option>
-          <option value="q_median_asc">q_median (low)</option>
-          <option value="n_runs_desc">n_runs (high)</option>
-          <option value="strong_share_desc">strong_share (high)</option>
-          <option value="validated_share_desc">validated_share (high)</option>
-          <option value="key_factor_asc">key_factor (A-Z)</option>
-        </select>
-        <label for="explorer_combo_limit" style="margin:0; align-self:center;">rows</label>
-        <select id="explorer_combo_limit" style="width:auto; min-width:84px;">
-          <option value="10">10</option>
-          <option value="20" selected>20</option>
-          <option value="50">50</option>
-          <option value="100">100</option>
-        </select>
-        <button id="explorer_combo_reset_btn" class="ghost">Reset Filter</button>
-      </div>
-      <div id="explorer_combo_notice" class="hint-box">showing 0 / 0 combinations</div>
-      <div class="run-table-wrap" style="margin-top: 8px;">
-        <table>
-          <thead>
-            <tr>
-              <th>rank</th>
-              <th>key_factor</th>
-              <th>track/context/spec</th>
-              <th>n_runs</th>
-              <th>q_best</th>
-              <th>q_median</th>
-              <th>strong_share</th>
-              <th>validated_share</th>
-            </tr>
-          </thead>
-          <tbody id="explorer_combo_tbody"></tbody>
-        </table>
-      </div>
-      <label>Top Key Factors</label>
-      <div class="run-table-wrap" style="margin-top: 8px;">
-        <table>
-          <thead>
-            <tr>
-              <th>rank</th>
-              <th>key_factor</th>
-              <th>n_runs</th>
-              <th>q_best</th>
-              <th>q_median</th>
-              <th>strong_share</th>
-              <th>validated_share</th>
-            </tr>
-          </thead>
-          <tbody id="explorer_factor_tbody"></tbody>
-        </table>
-      </div>
+      <details class="viz-card fold-card explorer-table-fold" id="explorer_tables_fold">
+        <summary>Top Combinations / Top Key Factors</summary>
+        <div class="fold-body">
+          <label>Top Combinations</label>
+          <div class="toolbar">
+            <label for="explorer_combo_filter_text" style="margin:0; align-self:center;">factor contains</label>
+            <input id="explorer_combo_filter_text" style="width:220px;" placeholder="e.g. is_academia_origin" />
+            <label for="explorer_combo_sort_key" style="margin:0; align-self:center;">sort</label>
+            <select id="explorer_combo_sort_key" style="width:auto; min-width:190px;">
+              <option value="q_best_asc" selected>q_best (low)</option>
+              <option value="q_median_asc">q_median (low)</option>
+              <option value="n_runs_desc">n_runs (high)</option>
+              <option value="strong_share_desc">strong_share (high)</option>
+              <option value="validated_share_desc">validated_share (high)</option>
+              <option value="key_factor_asc">key_factor (A-Z)</option>
+            </select>
+            <label for="explorer_combo_limit" style="margin:0; align-self:center;">rows</label>
+            <select id="explorer_combo_limit" style="width:auto; min-width:84px;">
+              <option value="10">10</option>
+              <option value="20" selected>20</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+            </select>
+            <button id="explorer_combo_reset_btn" class="ghost">Reset Filter</button>
+          </div>
+          <div id="explorer_combo_notice" class="hint-box">showing 0 / 0 combinations</div>
+          <div class="run-table-wrap" style="margin-top: 8px;">
+            <table>
+              <thead>
+                <tr>
+                  <th>rank</th>
+                  <th>key_factor</th>
+                  <th>track/context/spec</th>
+                  <th>n_runs</th>
+                  <th>q_best</th>
+                  <th>q_median</th>
+                  <th>strong_share</th>
+                  <th>validated_share</th>
+                </tr>
+              </thead>
+              <tbody id="explorer_combo_tbody"></tbody>
+            </table>
+          </div>
+          <label>Top Key Factors</label>
+          <div class="run-table-wrap" style="margin-top: 8px;">
+            <table>
+              <thead>
+                <tr>
+                  <th>rank</th>
+                  <th>key_factor</th>
+                  <th>n_runs</th>
+                  <th>q_best</th>
+                  <th>q_median</th>
+                  <th>strong_share</th>
+                  <th>validated_share</th>
+                </tr>
+              </thead>
+              <tbody id="explorer_factor_tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </details>
       <label>Equation Builder (Stepwise Fit + Uncertainty)</label>
       <div class="toolbar">
         <label for="eq_run_id" style="margin:0; align-self:center;">run_id</label>
@@ -1372,6 +1661,7 @@ __MODE_FILTER_OPTIONS__
     </section>
   </div>
 
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
   <script>
     function byId(id) { return document.getElementById(id); }
 
@@ -1405,6 +1695,10 @@ __MODE_FILTER_OPTIONS__
       explorerBusy: false,
       explorerPayload: null,
       explorerJointSelection: { q_idx: -1, p_idx: -1 },
+      explorerJointData: null,
+      explorerFocus: { kind: "combo", combo_id: "", run_id: "" },
+      explorerFocusRunSnapshot: null,
+      uxBench: null,
       equationBusy: false,
       equationPayload: null,
       compareSnapshot: null,
@@ -1478,6 +1772,182 @@ __MODE_FILTER_OPTIONS__
       if (kind === "ok") el.classList.add("notice-ok");
       if (kind === "error") el.classList.add("notice-error");
       el.textContent = message;
+    }
+
+    const UX_ACTION_KEYS = ["refresh_explorer", "focus_selected", "filter_applied", "inspect_run"];
+    const UX_SECTION_IDS = [
+      "section_explorer_sweep",
+      "section_run_workspace",
+      "section_run_monitor",
+      "section_dataset_explorer",
+    ];
+
+    function newUxBenchState() {
+      const actions = {};
+      for (const key of UX_ACTION_KEYS) actions[key] = false;
+      return {
+        active: false,
+        started_at_ms: 0,
+        ended_at_ms: 0,
+        click_count: 0,
+        section_hops: 0,
+        section_visits: {},
+        last_section: "",
+        scroll_px: 0,
+        last_scroll_y: Number(window.scrollY || 0),
+        actions: actions,
+      };
+    }
+
+    function ensureUxBenchState() {
+      if (!UI_STATE.uxBench || typeof UI_STATE.uxBench !== "object") {
+        UI_STATE.uxBench = newUxBenchState();
+      }
+      return UI_STATE.uxBench;
+    }
+
+    function uxElapsedSec(state) {
+      const s = state && typeof state === "object" ? state : ensureUxBenchState();
+      const start = Number(s.started_at_ms || 0);
+      if (!start) return 0;
+      const end = s.active ? Date.now() : Number(s.ended_at_ms || Date.now());
+      return Math.max(0, (end - start) / 1000.0);
+    }
+
+    function resolveUxSectionIdFromNode(node) {
+      if (!node || !node.closest) return "";
+      const el = node.closest("section[id]");
+      if (el && UX_SECTION_IDS.includes(String(el.id || ""))) return String(el.id || "");
+      if (node.closest("#section_explorer_sweep")) return "section_explorer_sweep";
+      if (node.closest("#section_run_workspace")) return "section_run_workspace";
+      if (node.closest("#section_run_monitor")) return "section_run_monitor";
+      if (node.closest("#section_dataset_explorer")) return "section_dataset_explorer";
+      return "";
+    }
+
+    function markUxAction(actionKey) {
+      const key = String(actionKey || "").trim();
+      if (!key) return;
+      const state = ensureUxBenchState();
+      if (!Object.prototype.hasOwnProperty.call(state.actions, key)) return;
+      state.actions[key] = true;
+      renderUxBenchState();
+    }
+
+    function uxPayloadForExport() {
+      const state = ensureUxBenchState();
+      const visitedKeys = Object.keys(state.section_visits || {});
+      const doneCount = UX_ACTION_KEYS.filter((k) => Boolean(state.actions && state.actions[k])).length;
+      const vh = Math.max(1, Number(window.innerHeight || 1));
+      return {
+        exported_at_utc: new Date().toISOString(),
+        active: Boolean(state.active),
+        elapsed_sec: Number(uxElapsedSec(state).toFixed(2)),
+        click_count: Number(state.click_count || 0),
+        section_hops: Number(state.section_hops || 0),
+        section_visited_count: Number(visitedKeys.length),
+        section_visits: state.section_visits || {},
+        scroll_px: Number(state.scroll_px || 0),
+        scroll_viewports: Number(((Number(state.scroll_px || 0)) / vh).toFixed(2)),
+        actions_completed: doneCount,
+        actions_total: UX_ACTION_KEYS.length,
+        actions: state.actions || {},
+      };
+    }
+
+    function renderUxBenchState() {
+      const state = ensureUxBenchState();
+      const notice = byId("ux_notice");
+      const tbody = byId("ux_overview_tbody");
+      if (!notice || !tbody) return;
+      tbody.replaceChildren();
+
+      const payload = uxPayloadForExport();
+      const statusText = payload.active ? "active" : "inactive";
+      const doneText = String(payload.actions_completed) + " / " + String(payload.actions_total);
+      const actionText = UX_ACTION_KEYS
+        .map((k) => String(k) + ":" + (payload.actions && payload.actions[k] ? "done" : "todo"))
+        .join(" | ");
+
+      if (payload.active) {
+        setNotice(notice, "ok", "journey active: step through Explorer flow and stop when done");
+      } else {
+        setNotice(notice, "", "journey inactive: start to measure movement cost");
+      }
+      appendOverviewRow(tbody, "status", statusText);
+      appendOverviewRow(tbody, "elapsed_sec", fmt(payload.elapsed_sec, 2));
+      appendOverviewRow(tbody, "click_count", fmt(payload.click_count));
+      appendOverviewRow(tbody, "section_hops", fmt(payload.section_hops));
+      appendOverviewRow(tbody, "section_visited_count", fmt(payload.section_visited_count));
+      appendOverviewRow(tbody, "scroll_viewports", fmt(payload.scroll_viewports, 2));
+      appendOverviewRow(tbody, "actions_completed", doneText);
+      appendOverviewRow(tbody, "actions", actionText);
+    }
+
+    function startUxBench() {
+      UI_STATE.uxBench = newUxBenchState();
+      const state = ensureUxBenchState();
+      state.active = true;
+      state.started_at_ms = Date.now();
+      state.last_scroll_y = Number(window.scrollY || 0);
+      renderUxBenchState();
+    }
+
+    function stopUxBench() {
+      const state = ensureUxBenchState();
+      if (!state.active) {
+        renderUxBenchState();
+        return;
+      }
+      state.active = false;
+      state.ended_at_ms = Date.now();
+      renderUxBenchState();
+    }
+
+    function resetUxBench() {
+      UI_STATE.uxBench = newUxBenchState();
+      renderUxBenchState();
+    }
+
+    async function copyUxBenchJson() {
+      const text = JSON.stringify(uxPayloadForExport(), null, 2);
+      try {
+        if (typeof navigator !== "undefined" &&
+            navigator.clipboard &&
+            typeof navigator.clipboard.writeText === "function") {
+          await navigator.clipboard.writeText(text);
+          setNotice(byId("ux_notice"), "ok", "copied journey metrics JSON");
+          return;
+        }
+      } catch (_err) {
+        // fallback below
+      }
+      window.prompt("copy journey metrics JSON", text);
+    }
+
+    function onUxDocumentClick(evt) {
+      const state = ensureUxBenchState();
+      if (!state.active) return;
+      state.click_count = Number(state.click_count || 0) + 1;
+      const sectionId = resolveUxSectionIdFromNode(evt && evt.target ? evt.target : null);
+      if (sectionId) {
+        state.section_visits[sectionId] = Number(state.section_visits[sectionId] || 0) + 1;
+        if (state.last_section && state.last_section !== sectionId) {
+          state.section_hops = Number(state.section_hops || 0) + 1;
+        }
+        state.last_section = sectionId;
+      }
+      renderUxBenchState();
+    }
+
+    function onUxScroll() {
+      const state = ensureUxBenchState();
+      if (!state.active) return;
+      const y = Number(window.scrollY || 0);
+      const prev = Number(state.last_scroll_y || 0);
+      state.scroll_px = Number(state.scroll_px || 0) + Math.abs(y - prev);
+      state.last_scroll_y = y;
+      renderUxBenchState();
     }
 
     function createStatusPill(state) {
@@ -1642,6 +2112,97 @@ __MODE_FILTER_OPTIONS__
       await runDatasetProfile();
     }
 
+    function normalizeRunKeyword(text) {
+      return String(text || "").trim();
+    }
+
+    function applyRunKeywordToFilters(keyword) {
+      const q = normalizeRunKeyword(keyword);
+      if (!q) return;
+      byId("quick_run_keyword").value = q;
+      byId("list_run_id_filter").value = q;
+      byId("explorer_run_like").value = q;
+    }
+
+    async function fetchRunsByKeyword(keyword) {
+      const q = normalizeRunKeyword(keyword);
+      if (!q) return [];
+      const params = new URLSearchParams();
+      params.set("limit", "500");
+      params.set("include_history", "true");
+      params.set("run_id_contains", q);
+      const mode = String(byId("list_mode_filter").value || "").trim();
+      if (mode) params.set("mode", mode);
+      const payload = await fetchJson("/runs?" + params.toString());
+      return Array.isArray(payload && payload.rows) ? payload.rows : [];
+    }
+
+    function pickLatestMatchingRow(rows) {
+      const data = Array.isArray(rows) ? rows.slice() : [];
+      if (!data.length) return null;
+      data.sort((a, b) => String(b && b.updated_at_utc || "").localeCompare(String(a && a.updated_at_utc || "")));
+      const withResult = data.find((row) => Boolean(row && row.has_result));
+      if (withResult) return withResult;
+      const succeeded = data.find((row) => String(row && row.state || "").toLowerCase() === "succeeded");
+      return succeeded || data[0] || null;
+    }
+
+    async function quickFindLatestRun(opts) {
+      const options = opts && typeof opts === "object" ? opts : {};
+      const inspect = Boolean(options.inspect);
+      const refreshExplorer = Boolean(options.refreshExplorer);
+      const rawKeyword =
+        byId("quick_run_keyword").value ||
+        byId("list_run_id_filter").value ||
+        byId("explorer_run_like").value;
+      const keyword = normalizeRunKeyword(rawKeyword);
+      if (!keyword) {
+        setNotice(byId("detail_notice"), "error", "quick run keyword is required");
+        return;
+      }
+
+      applyRunKeywordToFilters(keyword);
+      byId("runs_view_preset").value = "latest";
+      byId("runs_only_with_result").checked = true;
+      if (Number(byId("runs_row_limit").value || "0") < 100) {
+        byId("runs_row_limit").value = "200";
+      }
+
+      const matchedRows = await fetchRunsByKeyword(keyword);
+      if (!matchedRows.length) {
+        await refreshRuns();
+        setNotice(byId("detail_notice"), "error", "no run_id match for keyword: " + keyword);
+        return;
+      }
+
+      UI_STATE.lastRunRows = matchedRows;
+      const row = pickLatestMatchingRow(matchedRows);
+      if (!row || !row.run_id) {
+        await refreshRuns();
+        setNotice(byId("detail_notice"), "error", "matched rows found but run_id is missing");
+        return;
+      }
+
+      const rid = String(row.run_id);
+      UI_STATE.selectedRunId = rid;
+      byId("detail_run_id").value = rid;
+      await refreshRuns();
+
+      if (inspect) {
+        await inspectRun(rid);
+      } else {
+        setNotice(
+          byId("detail_notice"),
+          "ok",
+          "latest match: " + rid + " (" + String(matchedRows.length) + " matched rows)"
+        );
+      }
+
+      if (refreshExplorer) {
+        await refreshExplorerSummary();
+      }
+    }
+
     function pickLatestRunRow(rows, opts) {
       const data = Array.isArray(rows) ? rows.slice() : [];
       if (!data.length) return null;
@@ -1791,6 +2352,15 @@ __MODE_FILTER_OPTIONS__
       setNotice(byId("detail_notice"), "ok", "sources refreshed");
     }
 
+    function scrollToSection(sectionId) {
+      const id = String(sectionId || "").trim();
+      if (!id) return false;
+      const el = byId(id);
+      if (!el || typeof el.scrollIntoView !== "function") return false;
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+      return true;
+    }
+
     async function loadLatestRunResultGuided() {
       if (!Array.isArray(UI_STATE.lastRunRows) || !UI_STATE.lastRunRows.length) {
         await refreshRuns();
@@ -1799,7 +2369,7 @@ __MODE_FILTER_OPTIONS__
       const row = pickLatestRunRow(visible.length ? visible : UI_STATE.lastRunRows, { requireResult: true });
       if (!row || !row.run_id) {
         setNotice(byId("detail_notice"), "error", "no run history found");
-        return;
+        return "";
       }
       const rid = String(row.run_id);
       byId("detail_run_id").value = rid;
@@ -1807,6 +2377,7 @@ __MODE_FILTER_OPTIONS__
         byId("recent_run_select").value = rid;
       }
       await inspectRun(rid);
+      return rid;
     }
 
     async function loadLatestSavedReportGuided() {
@@ -1817,10 +2388,36 @@ __MODE_FILTER_OPTIONS__
       const row = rows[0] || null;
       if (!row || !row.relative_path) {
         setNotice(byId("saved_reports_notice"), "error", "no saved reports found");
-        return;
+        return "";
       }
       byId("saved_report_select").value = String(row.relative_path);
       await loadSavedReport();
+      return String(row.relative_path);
+    }
+
+    async function resumeLatestWorkspaceGuided() {
+      const workflowNotice = byId("workflow_notice");
+      try {
+        setNotice(workflowNotice, "", "resuming latest workspace...");
+        await refreshAllPreviousSources();
+        const jobs = await Promise.allSettled([
+          loadLatestRunResultGuided(),
+          loadLatestSavedReportGuided(),
+          loadDatasetConfig(),
+        ]);
+        await refreshExplorerSummary();
+        scrollToSection("section_explorer_sweep");
+        const loaded = jobs.filter((j) => j.status === "fulfilled").length;
+        const runId = jobs[0] && jobs[0].status === "fulfilled" ? String(jobs[0].value || "") : "";
+        setNotice(
+          workflowNotice,
+          "ok",
+          "workspace resumed: tasks=" + String(loaded) + "/3" + (runId ? ", run_id=" + runId : "")
+        );
+      } catch (err) {
+        const msg = String(err && err.message ? err.message : err);
+        setNotice(workflowNotice, "error", msg);
+      }
     }
 
     function setSubmitBusy(flag) {
@@ -2598,6 +3195,10 @@ __MODE_FILTER_OPTIONS__
       tbody.replaceChildren();
       const out = filteredExplorerComboRows(rows);
       const data = out.rows;
+      const focus = UI_STATE.explorerFocus && typeof UI_STATE.explorerFocus === "object"
+        ? UI_STATE.explorerFocus
+        : {};
+      const focusComboId = String(focus.combo_id || "").trim();
       byId("explorer_combo_notice").textContent =
         "showing " + String(data.length) + " / " + String(out.filtered) + " combinations (from " + String(out.total) + ")";
       if (!data.length) {
@@ -2612,6 +3213,11 @@ __MODE_FILTER_OPTIONS__
       for (let i = 0; i < data.length; i += 1) {
         const row = data[i] || {};
         const tr = document.createElement("tr");
+        const comboId = normalizeComboId(row);
+        if (comboId && comboId === focusComboId) {
+          tr.className = "focus-row-selected";
+        }
+        tr.classList.add("focus-clickable");
         const cells = [
           String(i + 1),
           String(row.key_factor || "-"),
@@ -2627,6 +3233,14 @@ __MODE_FILTER_OPTIONS__
           td.textContent = cell;
           tr.appendChild(td);
         }
+        tr.addEventListener("click", () => {
+          markUxAction("focus_selected");
+          setExplorerFocusCombo(row);
+          rerenderExplorerComboFromState();
+          maybeAutoInspectFocusAfterSelection().catch((err) => {
+            setNotice(byId("explorer_focus_notice"), "error", String(err && err.message ? err.message : err));
+          });
+        });
         tbody.appendChild(tr);
       }
     }
@@ -2636,6 +3250,7 @@ __MODE_FILTER_OPTIONS__
         ? UI_STATE.explorerPayload
         : {};
       renderExplorerComboTable(payload.top_combinations || []);
+      renderExplorerFocusPanelFromState();
     }
 
     function resetExplorerComboControls() {
@@ -3241,6 +3856,397 @@ __MODE_FILTER_OPTIONS__
       UI_STATE.explorerJointSelection = { q_idx: -1, p_idx: -1 };
     }
 
+    function normalizeComboId(row) {
+      return String(row && row.combo_id || "").trim();
+    }
+
+    function setExplorerFocusCombo(row) {
+      const comboId = normalizeComboId(row);
+      UI_STATE.explorerFocus = { kind: "combo", combo_id: comboId, run_id: "" };
+    }
+
+    function setExplorerFocusRun(runId) {
+      const rid = String(runId || "").trim();
+      UI_STATE.explorerFocus = { kind: "run", combo_id: "", run_id: rid };
+    }
+
+    function focusAutoInspectEnabled() {
+      const el = byId("explorer_focus_auto_inspect");
+      return !el || Boolean(el.checked);
+    }
+
+    function focusAutoJumpEnabled() {
+      const el = byId("explorer_focus_auto_jump");
+      return Boolean(el && el.checked);
+    }
+
+    function resolveFocusCombo(payload) {
+      const rows = Array.isArray(payload && payload.top_combinations) ? payload.top_combinations : [];
+      if (!rows.length) return null;
+      const current = UI_STATE.explorerFocus && typeof UI_STATE.explorerFocus === "object" ? UI_STATE.explorerFocus : {};
+      const comboId = String(current.combo_id || "").trim();
+      if (comboId) {
+        const hit = rows.find((row) => normalizeComboId(row) === comboId);
+        if (hit) return hit;
+      }
+      const filtered = filteredExplorerComboRows(rows).rows;
+      return filtered[0] || rows[0] || null;
+    }
+
+    function resolveFocusRun(payload, jointData) {
+      const points = Array.isArray(jointData && jointData.points) ? jointData.points : [];
+      if (!points.length) return null;
+      const current = UI_STATE.explorerFocus && typeof UI_STATE.explorerFocus === "object" ? UI_STATE.explorerFocus : {};
+      const runId = String(current.run_id || "").trim();
+      if (runId) {
+        const hit = points.find((pt) => String(pt && pt.run_id || "") === runId);
+        if (hit) return hit;
+      }
+      const topRuns = Array.isArray(payload && payload.top_runs) ? payload.top_runs : [];
+      const bestTop = topRuns[0] && topRuns[0].run_id
+        ? points.find((pt) => String(pt && pt.run_id || "") === String(topRuns[0].run_id))
+        : null;
+      return bestTop || points[0];
+    }
+
+    function scoreSimilarCombo(base, row) {
+      if (!base || !row) return -1;
+      const qBase = Number(base.q_best);
+      const qOther = Number(row.q_best);
+      const strongBase = Number(base.strong_share_q);
+      const strongOther = Number(row.strong_share_q);
+      const sameFactor = String(base.key_factor || "") === String(row.key_factor || "") ? 1 : 0;
+      const sameTrack = String(base.track || "") === String(row.track || "") ? 1 : 0;
+      const sameCtx = String(base.context_scope || "") === String(row.context_scope || "") ? 1 : 0;
+      const sameSpec = String(base.spec_id || "") === String(row.spec_id || "") ? 1 : 0;
+      const qGap = (Number.isFinite(qBase) && Number.isFinite(qOther)) ? Math.abs(qBase - qOther) : 1.0;
+      const sGap = (Number.isFinite(strongBase) && Number.isFinite(strongOther)) ? Math.abs(strongBase - strongOther) : 1.0;
+      const qScore = Math.max(0, 1 - qGap * 4.0);
+      const sScore = Math.max(0, 1 - sGap * 2.0);
+      return sameFactor * 2.0 + sameTrack * 0.6 + sameCtx * 0.5 + sameSpec * 0.4 + qScore + sScore;
+    }
+
+    function buildSimilarCombos(base, payload, limit) {
+      const rows = Array.isArray(payload && payload.top_combinations) ? payload.top_combinations : [];
+      const n = Number.isFinite(Number(limit)) ? Math.max(1, Math.floor(Number(limit))) : 6;
+      const out = rows
+        .filter((row) => normalizeComboId(row) !== normalizeComboId(base))
+        .map((row) => ({
+          kind: "combo",
+          row: row,
+          score: scoreSimilarCombo(base, row),
+        }))
+        .sort((a, b) => Number(b.score || 0) - Number(a.score || 0))
+        .slice(0, n);
+      return out;
+    }
+
+    function buildSimilarRuns(basePoint, jointData, limit) {
+      const points = Array.isArray(jointData && jointData.points) ? jointData.points : [];
+      const n = Number.isFinite(Number(limit)) ? Math.max(1, Math.floor(Number(limit))) : 6;
+      const bq = Number(basePoint && basePoint.q);
+      const bp = Number(basePoint && basePoint.p);
+      const out = points
+        .filter((pt) => String(pt && pt.run_id || "") !== String(basePoint && basePoint.run_id || ""))
+        .map((pt) => {
+          const q = Number(pt && pt.q);
+          const p = Number(pt && pt.p);
+          const dist = Math.sqrt(Math.pow(q - bq, 2) + Math.pow(p - bp, 2));
+          const score = Number.isFinite(dist) ? 1 / (1 + dist * 12) : 0;
+          return { kind: "run", row: pt, score: score };
+        })
+        .sort((a, b) => Number(b.score || 0) - Number(a.score || 0))
+        .slice(0, n);
+      return out;
+    }
+
+    function pickRunForCombo(combo, payload, jointData) {
+      const comboQ = Number(combo && combo.q_best);
+      const points = Array.isArray(jointData && jointData.points) ? jointData.points : [];
+      if (!points.length) return null;
+      if (!Number.isFinite(comboQ)) return points[0];
+      const sorted = points
+        .slice()
+        .sort((a, b) => Math.abs(Number(a.q) - comboQ) - Math.abs(Number(b.q) - comboQ));
+      return sorted[0] || null;
+    }
+
+    function renderExplorerFocusRunSnapshot(snapshot, targetRunId) {
+      const notice = byId("explorer_focus_run_notice");
+      const tbody = byId("explorer_focus_run_tbody");
+      if (!notice || !tbody) return;
+      tbody.replaceChildren();
+      const snap = snapshot && typeof snapshot === "object" ? snapshot : null;
+      const targetRid = String(targetRunId || "").trim();
+      if (!snap || !String(snap.run_id || "").trim()) {
+        setNotice(notice, "", "select a focus candidate and inspect to load run snapshot");
+        appendOverviewRow(tbody, "run_id", "-");
+        appendOverviewRow(tbody, "state", "-");
+        appendOverviewRow(tbody, "best_q_validation", "-");
+        appendOverviewRow(tbody, "restart_mean", "-");
+        return;
+      }
+      const snapRid = String(snap.run_id || "").trim();
+      const stale = Boolean(targetRid) && targetRid !== snapRid;
+      setNotice(
+        notice,
+        stale ? "" : "ok",
+        stale
+          ? "snapshot is from " + snapRid + " (focus run is " + targetRid + ", click inspect to sync)"
+          : "snapshot synced: " + snapRid
+      );
+      appendOverviewRow(tbody, "run_id", snapRid || "-");
+      appendOverviewRow(tbody, "mode", snap.mode || "-");
+      appendOverviewRow(tbody, "state", snap.state || "-");
+      appendOverviewRow(tbody, "validated_candidates", fmt(snap.validated_candidates));
+      appendOverviewRow(tbody, "best_q_validation", fmt(snap.best_q_validation, 4));
+      appendOverviewRow(tbody, "restart_mean", fmt(snap.restart_mean, 3));
+      appendOverviewRow(tbody, "governance", snap.governance_ok ? "pass" : "fail", snap.governance_ok ? "kpi-pass" : "kpi-fail");
+      appendOverviewRow(tbody, "leakage_guard", snap.leakage_ok ? "pass" : "fail", snap.leakage_ok ? "kpi-pass" : "kpi-fail");
+    }
+
+    function focusSnapshotFromInspect(statusResp, summaryResp, reviewResp) {
+      const status = statusResp && statusResp.status ? statusResp.status : {};
+      const summary = summaryResp && summaryResp.summary ? summaryResp.summary : {};
+      const review = reviewResp && reviewResp.review ? reviewResp.review : {};
+      const metrics = review && review.metrics && typeof review.metrics === "object" ? review.metrics : {};
+      const signal = evaluateDetailSignals(statusResp, reviewResp);
+      return {
+        run_id: String(status.run_id || summary.run_id || review.run_id || ""),
+        mode: String(status.mode || summary.mode || review.mode || ""),
+        state: String(status.state || summary.state || review.state || ""),
+        validated_candidates: numericOrNull(metrics.validated_candidate_count),
+        best_q_validation: numericOrNull(metrics.best_q_validation),
+        restart_mean: numericOrNull(metrics.restart_validated_rate_mean),
+        governance_ok: Boolean(signal.governanceOk),
+        leakage_ok: Boolean(signal.leakOk),
+      };
+    }
+
+    function renderExplorerFocusPanel(payload, jointData) {
+      const focusNotice = byId("explorer_focus_notice");
+      const focusTbody = byId("explorer_focus_tbody");
+      const similarNotice = byId("explorer_focus_similar_notice");
+      const similarTbody = byId("explorer_focus_similar_tbody");
+      focusTbody.replaceChildren();
+      similarTbody.replaceChildren();
+
+      const focus = UI_STATE.explorerFocus && typeof UI_STATE.explorerFocus === "object"
+        ? UI_STATE.explorerFocus
+        : { kind: "combo", combo_id: "", run_id: "" };
+
+      const focusRun = resolveFocusRun(payload, jointData);
+      const focusCombo = resolveFocusCombo(payload);
+      let similarRows = [];
+      let focusRunIdForSnapshot = "";
+
+      if (focus.kind === "run" && focusRun) {
+        setNotice(
+          focusNotice,
+          "",
+          "focus: run-level candidate (click scatter point to change)"
+        );
+        appendOverviewRow(focusTbody, "focus_type", "run");
+        appendOverviewRow(focusTbody, "run_id", focusRun.run_id || "-");
+        appendOverviewRow(focusTbody, "mode", focusRun.mode || "-");
+        appendOverviewRow(focusTbody, "best_q_validation", fmt(focusRun.q, 4));
+        appendOverviewRow(focusTbody, "best_p_validation", fmt(focusRun.p, 4));
+        appendOverviewRow(focusTbody, "validated_candidate_count", fmt(focusRun.validated));
+        similarRows = buildSimilarRuns(focusRun, jointData, 6);
+        focusRunIdForSnapshot = String(focusRun.run_id || "");
+      } else if (focusCombo) {
+        setExplorerFocusCombo(focusCombo);
+        setNotice(
+          focusNotice,
+          "",
+          "focus: top condition (click Top Combinations row or scatter point to switch)"
+        );
+        appendOverviewRow(focusTbody, "focus_type", "condition");
+        appendOverviewRow(focusTbody, "key_factor", focusCombo.key_factor || "-");
+        appendOverviewRow(
+          focusTbody,
+          "track/context/spec",
+          String(focusCombo.track || "-") + " / " + String(focusCombo.context_scope || "-") + " / " + String(focusCombo.spec_id || "-")
+        );
+        appendOverviewRow(focusTbody, "q_best", fmt(focusCombo.q_best, 4));
+        appendOverviewRow(focusTbody, "q_median", fmt(focusCombo.q_median, 4));
+        appendOverviewRow(focusTbody, "n_runs", fmt(focusCombo.n_runs));
+        appendOverviewRow(focusTbody, "strong_share", fmt(focusCombo.strong_share_q, 3));
+        appendOverviewRow(focusTbody, "validated_share", fmt(focusCombo.validated_share, 3));
+        similarRows = buildSimilarCombos(focusCombo, payload, 6);
+        const comboRun = pickRunForCombo(focusCombo, payload, jointData);
+        focusRunIdForSnapshot = String(comboRun && comboRun.run_id || "");
+      } else {
+        setNotice(focusNotice, "", "no focus candidate available");
+      }
+      renderExplorerFocusRunSnapshot(UI_STATE.explorerFocusRunSnapshot, focusRunIdForSnapshot);
+
+      if (!similarRows.length) {
+        similarNotice.textContent = "no similar conditions available";
+        const tr = document.createElement("tr");
+        const td = document.createElement("td");
+        td.colSpan = 5;
+        td.textContent = "no similar rows";
+        tr.appendChild(td);
+        similarTbody.appendChild(tr);
+        return;
+      }
+      similarNotice.textContent = "similar rows: " + String(similarRows.length);
+
+      let rank = 1;
+      for (const item of similarRows) {
+        const tr = document.createElement("tr");
+        tr.className = "focus-clickable";
+        const isRun = item.kind === "run";
+        const row = item.row || {};
+        const conditionText = isRun
+          ? String(row.run_id || "-")
+          : String(row.key_factor || "-") + " / " + String(row.track || "-");
+        const qOrP = isRun
+          ? "q=" + fmt(row.q, 3) + ", p=" + fmt(row.p, 3)
+          : "q=" + fmt(row.q_best, 3) + ", p=" + fmt(row.p_best, 3);
+        const runs = isRun ? "-" : fmt(row.n_runs);
+        const cells = [String(rank), conditionText, fmt(item.score, 3), qOrP, runs];
+        for (const cell of cells) {
+          const td = document.createElement("td");
+          td.textContent = cell;
+          tr.appendChild(td);
+        }
+        tr.addEventListener("click", () => {
+          markUxAction("focus_selected");
+          if (isRun) {
+            setExplorerFocusRun(String(row.run_id || ""));
+          } else {
+            setExplorerFocusCombo(row);
+          }
+          rerenderExplorerComboFromState();
+          maybeAutoInspectFocusAfterSelection().catch((err) => {
+            setNotice(byId("explorer_focus_notice"), "error", String(err && err.message ? err.message : err));
+          });
+        });
+        similarTbody.appendChild(tr);
+        rank += 1;
+      }
+    }
+
+    function renderExplorerFocusPanelFromState() {
+      const payload = UI_STATE.explorerPayload && typeof UI_STATE.explorerPayload === "object"
+        ? UI_STATE.explorerPayload
+        : {};
+      const jointData = UI_STATE.explorerJointData && typeof UI_STATE.explorerJointData === "object"
+        ? UI_STATE.explorerJointData
+        : { points: [] };
+      renderExplorerFocusPanel(payload, jointData);
+    }
+
+    function applyFocusFactorFilterFromState() {
+      const payload = UI_STATE.explorerPayload && typeof UI_STATE.explorerPayload === "object"
+        ? UI_STATE.explorerPayload
+        : {};
+      const combo = resolveFocusCombo(payload);
+      const factor = String(combo && combo.key_factor || "").trim();
+      if (!factor || factor === "-") {
+        setNotice(byId("explorer_focus_notice"), "error", "focus combo has no key_factor");
+        return false;
+      }
+      byId("explorer_combo_filter_text").value = factor;
+      byId("explorer_cluster_filter_text").value = factor;
+      rerenderExplorerComboFromState();
+      rerenderExplorerClusterFromState();
+      markUxAction("filter_applied");
+      setNotice(byId("explorer_focus_notice"), "ok", "applied factor filter: " + factor);
+      return true;
+    }
+
+    async function maybeAutoInspectFocusAfterSelection() {
+      if (!focusAutoInspectEnabled()) return false;
+      return inspectFocusRunFromState({ jumpToDetail: focusAutoJumpEnabled() });
+    }
+
+    async function inspectFocusRunFromState(options) {
+      const payload = UI_STATE.explorerPayload && typeof UI_STATE.explorerPayload === "object"
+        ? UI_STATE.explorerPayload
+        : {};
+      const jointData = UI_STATE.explorerJointData && typeof UI_STATE.explorerJointData === "object"
+        ? UI_STATE.explorerJointData
+        : { points: [] };
+      const focus = UI_STATE.explorerFocus && typeof UI_STATE.explorerFocus === "object"
+        ? UI_STATE.explorerFocus
+        : {};
+      const opts = options && typeof options === "object" ? options : {};
+      const jumpToDetail = Boolean(opts.jumpToDetail);
+
+      let runId = "";
+      if (String(focus.kind || "") === "run") {
+        runId = String(focus.run_id || "").trim();
+      } else {
+        const combo = resolveFocusCombo(payload);
+        const run = pickRunForCombo(combo, payload, jointData);
+        runId = String(run && run.run_id || "").trim();
+      }
+      if (!runId) {
+        setNotice(byId("explorer_focus_notice"), "error", "no focus run available");
+        return false;
+      }
+      byId("detail_run_id").value = runId;
+      await inspectRun(runId);
+      markUxAction("inspect_run");
+      setNotice(byId("explorer_focus_notice"), "ok", "inspected run: " + runId);
+      if (jumpToDetail) {
+        scrollToSection("section_run_workspace");
+      }
+      return true;
+    }
+
+    function hasPlotly() {
+      return (
+        typeof window !== "undefined" &&
+        window.Plotly &&
+        typeof window.Plotly.newPlot === "function"
+      );
+    }
+
+    function purgePlotly(el) {
+      if (!el || !hasPlotly()) return;
+      try {
+        window.Plotly.purge(el);
+      } catch (_err) {
+        // no-op
+      }
+    }
+
+    function bindPlotlyEvent(el, eventName, handler) {
+      if (!el || typeof el.on !== "function") return;
+      try {
+        if (typeof el.removeAllListeners === "function") {
+          el.removeAllListeners(eventName);
+        }
+      } catch (_err) {
+        // no-op
+      }
+      el.on(eventName, handler);
+    }
+
+    function buildExplorerMarginalSelectedCounts(data, selection) {
+      const points = Array.isArray(data && data.points) ? data.points : [];
+      const qBins = Array.isArray(data && data.q_bins) ? data.q_bins : [];
+      const pBins = Array.isArray(data && data.p_bins) ? data.p_bins : [];
+      const qCounts = new Array(qBins.length).fill(0);
+      const pCounts = new Array(pBins.length).fill(0);
+
+      for (const pt of points) {
+        const qIdx = Number(pt && pt.q_idx);
+        const pIdx = Number(pt && pt.p_idx);
+        if (selection.p_idx < 0 || pIdx === Number(selection.p_idx)) {
+          if (Number.isFinite(qIdx) && qIdx >= 0 && qIdx < qCounts.length) qCounts[qIdx] += 1;
+        }
+        if (selection.q_idx < 0 || qIdx === Number(selection.q_idx)) {
+          if (Number.isFinite(pIdx) && pIdx >= 0 && pIdx < pCounts.length) pCounts[pIdx] += 1;
+        }
+      }
+      return { q_counts: qCounts, p_counts: pCounts };
+    }
+
     function explorerJointBinIndex(value, axisMax, nBins) {
       const v = Number(value);
       if (!Number.isFinite(v)) return -1;
@@ -3335,28 +4341,30 @@ __MODE_FILTER_OPTIONS__
         const w = r && Number.isFinite(r.width) ? r.width : (el.clientWidth || 0);
         return Math.max(0, Math.floor(w || fallback));
       };
-      const scatterSide = Math.max(240, rectW(scatterWrap, 420));
+      const mainRaw = Math.max(320, Math.min(rectW(scatterWrap, 520), rectW(qWrap, 520)));
+      const scatterSide = Math.round(mainRaw);
       const scatter = {
         width: scatterSide,
         height: scatterSide,
-        margin: { top: 14, right: 18, bottom: 40, left: 50 },
+        margin: { top: 12, right: 18, bottom: 38, left: 50 },
       };
       scatter.plot_w = Math.max(120, scatter.width - scatter.margin.left - scatter.margin.right);
       scatter.plot_h = Math.max(120, scatter.height - scatter.margin.top - scatter.margin.bottom);
 
+      const topHeight = Math.max(96, Math.min(156, Math.round(scatter.height * 0.28)));
       const top = {
         width: scatter.width,
-        height: 132,
-        margin: { top: 8, right: scatter.margin.right, bottom: 24, left: scatter.margin.left },
+        height: topHeight,
+        margin: { top: 8, right: scatter.margin.right, bottom: 20, left: scatter.margin.left },
       };
       top.plot_w = Math.max(120, top.width - top.margin.left - top.margin.right);
-      top.plot_h = Math.max(50, top.height - top.margin.top - top.margin.bottom);
+      top.plot_h = Math.max(44, top.height - top.margin.top - top.margin.bottom);
 
-      const sideWidth = Math.max(180, rectW(pWrap, 240));
+      const sideWidth = Math.min(190, Math.max(150, rectW(pWrap, 170)));
       const side = {
         width: sideWidth,
         height: scatter.height,
-        margin: { top: scatter.margin.top, right: 10, bottom: scatter.margin.bottom, left: 66 },
+        margin: { top: scatter.margin.top, right: 10, bottom: scatter.margin.bottom, left: 52 },
       };
       side.plot_w = Math.max(80, side.width - side.margin.left - side.margin.right);
       side.plot_h = Math.max(120, side.height - side.margin.top - side.margin.bottom);
@@ -3424,6 +4432,107 @@ __MODE_FILTER_OPTIONS__
         empty.className = "scatter-empty";
         empty.textContent = "(no q distribution)";
         wrap.appendChild(empty);
+        return;
+      }
+
+      if (hasPlotly()) {
+        const selectedCounts = buildExplorerMarginalSelectedCounts(data, selection).q_counts;
+        const maxCount = Math.max(1, ...bins.map((bin) => Number(bin.count || 0)));
+        const xCenters = bins.map((bin) => (Number(bin.start || 0) + Number(bin.end || 0)) / 2);
+        const widths = bins.map((bin) => Math.max(1e-6, (Number(bin.end || 0) - Number(bin.start || 0)) * 0.88));
+        const fullCounts = bins.map((bin) => Number(bin.count || 0));
+        const linkedCounts = bins.map((bin) => Number(selectedCounts[bin.idx] || 0));
+        const activeIdx = Number(selection && selection.q_idx);
+        const baseLineColors = bins.map((bin) => (Number(bin.idx) === activeIdx ? "#102542" : "#9fb4cc"));
+
+        const traces = [
+          {
+            type: "bar",
+            x: xCenters,
+            y: fullCounts,
+            width: widths,
+            customdata: bins.map((bin) => Number(bin.idx)),
+            marker: {
+              color: "#d8e8fb",
+              line: { color: baseLineColors, width: 1 },
+            },
+            hovertemplate: "bin %{customdata}<br>q: %{x:.3f}<br>total: %{y}<extra></extra>",
+            name: "total",
+            opacity: 0.95,
+          },
+          {
+            type: "bar",
+            x: xCenters,
+            y: linkedCounts,
+            width: widths,
+            customdata: bins.map((bin) => Number(bin.idx)),
+            marker: {
+              color: bins.map((bin) => (Number(bin.idx) === activeIdx ? "#2f6bc2" : "#5c90d1")),
+              line: { color: "rgba(0,0,0,0)", width: 0 },
+            },
+            hovertemplate: "bin %{customdata}<br>q: %{x:.3f}<br>linked: %{y}<extra></extra>",
+            name: "linked",
+            opacity: 0.85,
+          },
+        ];
+
+        const shapes = [];
+        if (Number(data && data.q_gate) <= Number(data && data.x_max)) {
+          shapes.push({
+            type: "line",
+            x0: Number(data.q_gate),
+            x1: Number(data.q_gate),
+            y0: 0,
+            y1: maxCount * 1.06,
+            line: { color: "#ff7b00", width: 1.4, dash: "dash" },
+          });
+        }
+
+        const plotLayout = {
+          width: layout.top.width,
+          height: layout.top.height,
+          margin: {
+            l: layout.top.margin.left,
+            r: layout.top.margin.right,
+            t: layout.top.margin.top,
+            b: layout.top.margin.bottom,
+          },
+          barmode: "overlay",
+          showlegend: false,
+          paper_bgcolor: "#ffffff",
+          plot_bgcolor: "#f8fbff",
+          xaxis: {
+            range: [0, Number(data && data.x_max || 1)],
+            tickformat: ".2f",
+            showgrid: false,
+            zeroline: false,
+            fixedrange: true,
+          },
+          yaxis: {
+            range: [0, maxCount * 1.06],
+            tickfont: { size: 9, color: "#5f6f82" },
+            gridcolor: "#edf3fb",
+            zeroline: false,
+            fixedrange: true,
+          },
+          shapes: shapes,
+        };
+
+        purgePlotly(wrap);
+        window.Plotly.newPlot(wrap, traces, plotLayout, {
+          displayModeBar: false,
+          responsive: true,
+          scrollZoom: false,
+        });
+        bindPlotlyEvent(wrap, "plotly_click", (evt) => {
+          const pt = evt && Array.isArray(evt.points) && evt.points[0] ? evt.points[0] : null;
+          const idxRaw = pt ? Number(pt.customdata) : NaN;
+          if (!Number.isFinite(idxRaw) || idxRaw < 0) return;
+          const idx = Math.floor(idxRaw);
+          const next = ensureExplorerJointSelection();
+          next.q_idx = Number(next.q_idx) === idx ? -1 : idx;
+          rerenderExplorerDistributionsFromState();
+        });
         return;
       }
 
@@ -3528,6 +4637,109 @@ __MODE_FILTER_OPTIONS__
         return;
       }
 
+      if (hasPlotly()) {
+        const selectedCounts = buildExplorerMarginalSelectedCounts(data, selection).p_counts;
+        const maxCount = Math.max(1, ...bins.map((bin) => Number(bin.count || 0)));
+        const yCenters = bins.map((bin) => (Number(bin.start || 0) + Number(bin.end || 0)) / 2);
+        const widths = bins.map((bin) => Math.max(1e-6, (Number(bin.end || 0) - Number(bin.start || 0)) * 0.88));
+        const fullCounts = bins.map((bin) => Number(bin.count || 0));
+        const linkedCounts = bins.map((bin) => Number(selectedCounts[bin.idx] || 0));
+        const activeIdx = Number(selection && selection.p_idx);
+        const baseLineColors = bins.map((bin) => (Number(bin.idx) === activeIdx ? "#102542" : "#9fb4cc"));
+
+        const traces = [
+          {
+            type: "bar",
+            orientation: "h",
+            x: fullCounts,
+            y: yCenters,
+            width: widths,
+            customdata: bins.map((bin) => Number(bin.idx)),
+            marker: {
+              color: "#d8e8fb",
+              line: { color: baseLineColors, width: 1 },
+            },
+            hovertemplate: "bin %{customdata}<br>p: %{y:.3f}<br>total: %{x}<extra></extra>",
+            name: "total",
+            opacity: 0.95,
+          },
+          {
+            type: "bar",
+            orientation: "h",
+            x: linkedCounts,
+            y: yCenters,
+            width: widths,
+            customdata: bins.map((bin) => Number(bin.idx)),
+            marker: {
+              color: bins.map((bin) => (Number(bin.idx) === activeIdx ? "#2f6bc2" : "#5c90d1")),
+              line: { color: "rgba(0,0,0,0)", width: 0 },
+            },
+            hovertemplate: "bin %{customdata}<br>p: %{y:.3f}<br>linked: %{x}<extra></extra>",
+            name: "linked",
+            opacity: 0.85,
+          },
+        ];
+
+        const shapes = [];
+        if (Number(data && data.p_gate) <= Number(data && data.y_max)) {
+          shapes.push({
+            type: "line",
+            x0: 0,
+            x1: maxCount * 1.06,
+            y0: Number(data.p_gate),
+            y1: Number(data.p_gate),
+            line: { color: "#5f6f82", width: 1.2, dash: "dash" },
+          });
+        }
+
+        const plotLayout = {
+          width: layout.side.width,
+          height: layout.side.height,
+          margin: {
+            l: layout.side.margin.left,
+            r: layout.side.margin.right,
+            t: layout.side.margin.top,
+            b: layout.side.margin.bottom,
+          },
+          barmode: "overlay",
+          showlegend: false,
+          paper_bgcolor: "#ffffff",
+          plot_bgcolor: "#f8fbff",
+          xaxis: {
+            range: [0, maxCount * 1.06],
+            tickfont: { size: 9, color: "#5f6f82" },
+            gridcolor: "#edf3fb",
+            zeroline: false,
+            fixedrange: true,
+          },
+          yaxis: {
+            range: [0, Number(data && data.y_max || 1)],
+            tickformat: ".2f",
+            showgrid: false,
+            zeroline: false,
+            fixedrange: true,
+          },
+          shapes: shapes,
+        };
+
+        purgePlotly(wrap);
+        window.Plotly.newPlot(wrap, traces, plotLayout, {
+          displayModeBar: false,
+          responsive: true,
+          scrollZoom: false,
+        });
+        bindPlotlyEvent(wrap, "plotly_click", (evt) => {
+          const pt = evt && Array.isArray(evt.points) && evt.points[0] ? evt.points[0] : null;
+          const idxRaw = pt ? Number(pt.customdata) : NaN;
+          if (!Number.isFinite(idxRaw) || idxRaw < 0) return;
+          const idx = Math.floor(idxRaw);
+          const next = ensureExplorerJointSelection();
+          next.p_idx = Number(next.p_idx) === idx ? -1 : idx;
+          rerenderExplorerDistributionsFromState();
+        });
+        return;
+      }
+
       const selectedCounts = new Array(bins.length).fill(0);
       for (const pt of points) {
         if (selection.q_idx >= 0 && Number(pt && pt.q_idx) !== Number(selection.q_idx)) continue;
@@ -3621,7 +4833,17 @@ __MODE_FILTER_OPTIONS__
       const meta = byId("explorer_best_qp_meta");
       const hover = byId("explorer_best_qp_hover");
       wrap.replaceChildren();
-      hover.textContent = "hover a point for metrics; click to load Run Details";
+      const setHoverMessage = (text) => {
+        const msg = String(text || "").trim();
+        if (!msg) {
+          hover.classList.add("hidden");
+          hover.textContent = "";
+          return;
+        }
+        hover.classList.remove("hidden");
+        hover.textContent = msg;
+      };
+      setHoverMessage("");
 
       const points = Array.isArray(data && data.points) ? data.points : [];
       if (!points.length) {
@@ -3630,7 +4852,182 @@ __MODE_FILTER_OPTIONS__
         empty.textContent = "(no run-level points with both best q and best p)";
         wrap.appendChild(empty);
         meta.textContent = "points: 0";
-        hover.textContent = "no points available for hover";
+        setHoverMessage("no points available for hover");
+        return;
+      }
+
+      const shown = points.filter((pt) => pointMatchesExplorerJointSelection(pt, selection));
+      let shownQPass = 0;
+      let shownPPass = 0;
+      let shownBoth = 0;
+      for (const pt of points) {
+        const selected = pointMatchesExplorerJointSelection(pt, selection);
+        if (!selected) continue;
+        const qPass = pt.q <= data.q_gate;
+        const pPass = pt.p <= data.p_gate;
+        if (qPass) shownQPass += 1;
+        if (pPass) shownPPass += 1;
+        if (qPass && pPass) shownBoth += 1;
+      }
+
+      if (hasPlotly()) {
+        const pointIdx = points.map((_pt, idx) => idx);
+        const markerColor = points.map((pt) => {
+          const qPass = pt.q <= data.q_gate;
+          const pPass = pt.p <= data.p_gate;
+          if (qPass && pPass) return "#1d7a32";
+          if (qPass) return "#2f82c7";
+          return "#8ca0b6";
+        });
+        const markerOpacity = points.map((pt) =>
+          pointMatchesExplorerJointSelection(pt, selection) ? 0.88 : 0.16
+        );
+        const markerSize = points.map((pt) =>
+          (pointMatchesExplorerJointSelection(pt, selection) ? 6.5 : 5.0) +
+          Math.min(3.2, Math.max(0, Number(pt.validated || 0)) * 0.34)
+        );
+        const hoverText = points.map((pt) =>
+          String(pt.run_id || "-") +
+          " [" + String(pt.mode || "-") + "]" +
+          "<br>q=" + fmt(Number(pt.q), 4) +
+          "<br>p=" + fmt(Number(pt.p), 4) +
+          "<br>validated=" + fmt(Number(pt.validated), 0)
+        );
+        const trace = {
+          type: "scatter",
+          mode: "markers",
+          x: points.map((pt) => Number(pt.q)),
+          y: points.map((pt) => Number(pt.p)),
+          customdata: pointIdx,
+          text: hoverText,
+          // Keep plotly hover events, but suppress native hover labels that cover the chart.
+          hoverinfo: "none",
+          hovertemplate: null,
+          marker: {
+            size: markerSize,
+            color: markerColor,
+            opacity: markerOpacity,
+            line: { color: "#ffffff", width: 1 },
+          },
+        };
+        const shapes = [];
+        if (Number(data && data.q_gate) <= Number(data && data.x_max)) {
+          shapes.push({
+            type: "line",
+            x0: Number(data.q_gate),
+            x1: Number(data.q_gate),
+            y0: 0,
+            y1: Number(data.y_max || 1),
+            line: { color: "#ff7b00", width: 1.4, dash: "dash" },
+          });
+        }
+        if (Number(data && data.p_gate) <= Number(data && data.y_max)) {
+          shapes.push({
+            type: "line",
+            x0: 0,
+            x1: Number(data.x_max || 1),
+            y0: Number(data.p_gate),
+            y1: Number(data.p_gate),
+            line: { color: "#5f6f82", width: 1.2, dash: "dash" },
+          });
+        }
+        const plotLayout = {
+          width: layout.scatter.width,
+          height: layout.scatter.height,
+          margin: {
+            l: layout.scatter.margin.left,
+            r: layout.scatter.margin.right,
+            t: layout.scatter.margin.top,
+            b: layout.scatter.margin.bottom,
+          },
+          showlegend: false,
+          paper_bgcolor: "#ffffff",
+          plot_bgcolor: "#f8fbff",
+          xaxis: {
+            title: "best q (validation)",
+            range: [0, Number(data && data.x_max || 1)],
+            tickformat: ".2f",
+            gridcolor: "#edf3fb",
+            zeroline: false,
+            fixedrange: true,
+          },
+          yaxis: {
+            title: "best p (validation)",
+            range: [0, Number(data && data.y_max || 1)],
+            tickformat: ".2f",
+            gridcolor: "#edf3fb",
+            zeroline: false,
+            fixedrange: true,
+          },
+          shapes: shapes,
+        };
+
+        const updateHoverText = (pt) => {
+          const qPass = pt.q <= data.q_gate;
+          const pPass = pt.p <= data.p_gate;
+          const qLabel = data.q_bins[pt.q_idx] ? explorerJointRangeLabel(data.q_bins[pt.q_idx]) : "-";
+          const pLabel = data.p_bins[pt.p_idx] ? explorerJointRangeLabel(data.p_bins[pt.p_idx]) : "-";
+          const tierText = qPass && pPass ? "q+p pass" : (qPass ? "q pass only" : "q/p below gate");
+          setHoverMessage(
+            pt.run_id + " [" + pt.mode + "]" +
+            " | q=" + fmt(pt.q, 4) +
+            " | p=" + fmt(pt.p, 4) +
+            " | validated=" + fmt(pt.validated, 0) +
+            " | bins: " + qLabel + " / " + pLabel +
+            " | " + tierText
+          );
+        };
+
+        purgePlotly(wrap);
+        window.Plotly.newPlot(wrap, [trace], plotLayout, {
+          displayModeBar: false,
+          responsive: true,
+          scrollZoom: false,
+        });
+        bindPlotlyEvent(wrap, "plotly_hover", (evt) => {
+          const item = evt && Array.isArray(evt.points) && evt.points[0] ? evt.points[0] : null;
+          const idxRaw = item ? Number(item.customdata) : NaN;
+          if (!Number.isFinite(idxRaw) || idxRaw < 0) return;
+          const pt = points[Math.floor(idxRaw)];
+          if (!pt) return;
+          updateHoverText(pt);
+        });
+        bindPlotlyEvent(wrap, "plotly_click", async (evt) => {
+          const item = evt && Array.isArray(evt.points) && evt.points[0] ? evt.points[0] : null;
+          const idxRaw = item ? Number(item.customdata) : NaN;
+          if (!Number.isFinite(idxRaw) || idxRaw < 0) return;
+          const pt = points[Math.floor(idxRaw)];
+          if (!pt) return;
+          const rid = String(pt.run_id || "").trim();
+          if (!rid || rid === "-") {
+            setNotice(byId("detail_notice"), "error", "selected point has no run_id");
+            return;
+          }
+          markUxAction("focus_selected");
+          setExplorerFocusRun(rid);
+          renderExplorerFocusPanelFromState();
+          updateHoverText(pt);
+          if (focusAutoInspectEnabled()) {
+            setHoverMessage(pt.run_id + " [" + pt.mode + "] | loading details...");
+            try {
+              await inspectFocusRunFromState({ jumpToDetail: focusAutoJumpEnabled() });
+              setHoverMessage(pt.run_id + " [" + pt.mode + "] | loaded to Run Details");
+            } catch (err) {
+              setNotice(byId("detail_notice"), "error", String(err && err.message ? err.message : err));
+            }
+          } else {
+            setHoverMessage(pt.run_id + " [" + pt.mode + "] | selected (auto inspect off)");
+          }
+        });
+        bindPlotlyEvent(wrap, "plotly_unhover", () => {
+          setHoverMessage("");
+        });
+
+        meta.textContent =
+          "visible points: " + String(shown.length) + " / " + String(points.length) +
+          " | q<=" + fmt(data.q_gate, 2) + ": " + String(shownQPass) +
+          " | p<=0.05: " + String(shownPPass) +
+          " | both: " + String(shownBoth);
         return;
       }
 
@@ -3674,10 +5071,6 @@ __MODE_FILTER_OPTIONS__
         svg.appendChild(mk("line", { x1: layout.scatter.margin.left, y1: pLine, x2: layout.scatter.margin.left + layout.scatter.plot_w, y2: pLine, stroke: "#5f6f82", "stroke-width": 1.2, "stroke-dasharray": "4 3" }));
       }
 
-      const shown = points.filter((pt) => pointMatchesExplorerJointSelection(pt, selection));
-      let shownQPass = 0;
-      let shownPPass = 0;
-      let shownBoth = 0;
       let activeDot = null;
       const setActiveDot = (dot) => {
         if (activeDot && activeDot !== dot) activeDot.classList.remove("scatter-point-active");
@@ -3688,13 +5081,14 @@ __MODE_FILTER_OPTIONS__
         const qLabel = data.q_bins[pt.q_idx] ? explorerJointRangeLabel(data.q_bins[pt.q_idx]) : "-";
         const pLabel = data.p_bins[pt.p_idx] ? explorerJointRangeLabel(data.p_bins[pt.p_idx]) : "-";
         const tierText = qPass && pPass ? "q+p pass" : (qPass ? "q pass only" : "q/p below gate");
-        hover.textContent =
+        setHoverMessage(
           pt.run_id + " [" + pt.mode + "]" +
           " | q=" + fmt(pt.q, 4) +
           " | p=" + fmt(pt.p, 4) +
           " | validated=" + fmt(pt.validated, 0) +
           " | bins: " + qLabel + " / " + pLabel +
-          " | " + tierText;
+          " | " + tierText
+        );
       };
       const loadRunDetailsFromPoint = async (pt, qPass, pPass, dot) => {
         setActiveDot(dot);
@@ -3704,12 +5098,19 @@ __MODE_FILTER_OPTIONS__
           setNotice(byId("detail_notice"), "error", "selected point has no run_id");
           return;
         }
-        hover.textContent = pt.run_id + " [" + pt.mode + "] | loading details...";
-        try {
-          await inspectRun(rid);
-          hover.textContent = pt.run_id + " [" + pt.mode + "] | loaded to Run Details";
-        } catch (err) {
-          setNotice(byId("detail_notice"), "error", String(err && err.message ? err.message : err));
+        markUxAction("focus_selected");
+        setExplorerFocusRun(rid);
+        renderExplorerFocusPanelFromState();
+        if (focusAutoInspectEnabled()) {
+          setHoverMessage(pt.run_id + " [" + pt.mode + "] | loading details...");
+          try {
+            await inspectFocusRunFromState({ jumpToDetail: focusAutoJumpEnabled() });
+            setHoverMessage(pt.run_id + " [" + pt.mode + "] | loaded to Run Details");
+          } catch (err) {
+            setNotice(byId("detail_notice"), "error", String(err && err.message ? err.message : err));
+          }
+        } else {
+          setHoverMessage(pt.run_id + " [" + pt.mode + "] | selected (auto inspect off)");
         }
       };
 
@@ -3772,6 +5173,7 @@ __MODE_FILTER_OPTIONS__
       const qGateRaw = Number(byId("explorer_q_threshold").value || "0.10");
       const qGate = Number.isFinite(qGateRaw) ? Math.max(0, Math.min(1, qGateRaw)) : 0.10;
       const data = buildExplorerJointData(payload, qGate);
+      UI_STATE.explorerJointData = data;
       const selection = ensureExplorerJointSelection();
       if (selection.q_idx >= data.q_bins.length) selection.q_idx = -1;
       if (selection.p_idx >= data.p_bins.length) selection.p_idx = -1;
@@ -3780,6 +5182,7 @@ __MODE_FILTER_OPTIONS__
       renderExplorerPMarginal(data, selection, layout);
       renderExplorerBestQpScatter(data, selection, layout);
       renderExplorerJointKpis(data, selection, qGate);
+      return data;
     }
 
     function rerenderExplorerDistributionsFromState() {
@@ -3787,6 +5190,7 @@ __MODE_FILTER_OPTIONS__
         ? UI_STATE.explorerPayload
         : {};
       renderExplorerDistributions(payload);
+      renderExplorerFocusPanelFromState();
     }
 
     async function refreshExplorerSummary() {
@@ -3812,11 +5216,12 @@ __MODE_FILTER_OPTIONS__
         UI_STATE.explorerPayload = out;
         byId("explorer_raw_box").textContent = prettyJson(out);
         renderExplorerKpiCards(out);
-        renderExplorerDistributions(out);
+        const jointData = renderExplorerDistributions(out);
         renderExplorerComboTable(out.top_combinations || []);
         renderExplorerFactorTable(out.top_key_factors || []);
         renderExplorerPairTable(out.top_affinity_pairs || []);
         renderExplorerClusterTable(out.factor_clusters || []);
+        renderExplorerFocusPanel(out, jointData);
         if (!String(byId("eq_run_id").value || "").trim()) {
           const topRuns = Array.isArray(out.top_runs) ? out.top_runs : [];
           if (topRuns.length && topRuns[0] && topRuns[0].run_id) {
@@ -3834,6 +5239,7 @@ __MODE_FILTER_OPTIONS__
             ", inference=" + String(totals.runs_with_inference || 0) +
             ", combos=" + String(totals.distinct_combinations || 0)
         );
+        markUxAction("refresh_explorer");
       } catch (err) {
         setNotice(notice, "error", String(err && err.message ? err.message : err));
       } finally {
@@ -4742,7 +6148,10 @@ __MODE_FILTER_OPTIONS__
         renderDetailVerdict(status, review);
         renderReviewCards(status, review);
         renderDetailOverview(status, summary, review);
+        UI_STATE.explorerFocusRunSnapshot = focusSnapshotFromInspect(status, summary, review);
+        renderExplorerFocusRunSnapshot(UI_STATE.explorerFocusRunSnapshot, rid);
         setNotice(detailNotice, "ok", "loaded: " + rid);
+        markUxAction("inspect_run");
         if (!String(byId("dataset_run_id").value || "").trim()) {
           byId("dataset_run_id").value = rid;
         }
@@ -5003,6 +6412,25 @@ __MODE_FILTER_OPTIONS__
         setNotice(byId("dataset_config_notice"), "error", String(err && err.message ? err.message : err));
       });
     });
+    byId("load_prev_resume_workspace_btn").addEventListener("click", () => {
+      resumeLatestWorkspaceGuided().catch((err) => {
+        setNotice(byId("workflow_notice"), "error", String(err && err.message ? err.message : err));
+      });
+    });
+    byId("resume_latest_workspace_btn").addEventListener("click", () => {
+      resumeLatestWorkspaceGuided().catch((err) => {
+        setNotice(byId("workflow_notice"), "error", String(err && err.message ? err.message : err));
+      });
+    });
+    byId("nav_to_explorer_btn").addEventListener("click", () => {
+      scrollToSection("section_explorer_sweep");
+    });
+    byId("nav_to_run_details_btn").addEventListener("click", () => {
+      scrollToSection("section_run_workspace");
+    });
+    byId("nav_to_saved_reports_btn").addEventListener("click", () => {
+      scrollToSection("section_saved_reports");
+    });
     byId("inspect_btn").addEventListener("click", onInspectClick);
     byId("inspect_profile_btn").addEventListener("click", () => {
       inspectAndProfileFromDetail().catch((err) => {
@@ -5044,6 +6472,42 @@ __MODE_FILTER_OPTIONS__
     byId("explorer_joint_clear_btn").addEventListener("click", () => {
       resetExplorerJointSelection();
       rerenderExplorerDistributionsFromState();
+    });
+    byId("ux_start_btn").addEventListener("click", () => {
+      startUxBench();
+    });
+    byId("ux_stop_btn").addEventListener("click", () => {
+      stopUxBench();
+    });
+    byId("ux_reset_btn").addEventListener("click", () => {
+      resetUxBench();
+    });
+    byId("ux_copy_btn").addEventListener("click", () => {
+      copyUxBenchJson().catch((err) => {
+        setNotice(byId("ux_notice"), "error", String(err && err.message ? err.message : err));
+      });
+    });
+    byId("explorer_focus_apply_filter_btn").addEventListener("click", () => {
+      try {
+        applyFocusFactorFilterFromState();
+      } catch (err) {
+        setNotice(byId("explorer_focus_notice"), "error", String(err && err.message ? err.message : err));
+      }
+    });
+    byId("explorer_focus_inspect_run_btn").addEventListener("click", () => {
+      inspectFocusRunFromState({ jumpToDetail: focusAutoJumpEnabled() }).catch((err) => {
+        setNotice(byId("explorer_focus_notice"), "error", String(err && err.message ? err.message : err));
+      });
+    });
+    byId("explorer_focus_apply_inspect_btn").addEventListener("click", () => {
+      try {
+        applyFocusFactorFilterFromState();
+      } catch (err) {
+        setNotice(byId("explorer_focus_notice"), "error", String(err && err.message ? err.message : err));
+      }
+      inspectFocusRunFromState({ jumpToDetail: focusAutoJumpEnabled() }).catch((err) => {
+        setNotice(byId("explorer_focus_notice"), "error", String(err && err.message ? err.message : err));
+      });
     });
     byId("explorer_combo_filter_text").addEventListener("input", () => {
       rerenderExplorerComboFromState();
@@ -5092,6 +6556,27 @@ __MODE_FILTER_OPTIONS__
       }
     });
     byId("refresh_runs_btn").addEventListener("click", onRefreshRunsClick);
+    byId("quick_find_latest_btn").addEventListener("click", () => {
+      quickFindLatestRun({ inspect: false, refreshExplorer: false }).catch((err) => {
+        setNotice(byId("detail_notice"), "error", String(err && err.message ? err.message : err));
+      });
+    });
+    byId("quick_find_inspect_btn").addEventListener("click", () => {
+      quickFindLatestRun({ inspect: true, refreshExplorer: false }).catch((err) => {
+        setNotice(byId("detail_notice"), "error", String(err && err.message ? err.message : err));
+      });
+    });
+    byId("quick_apply_keyword_all_btn").addEventListener("click", () => {
+      quickFindLatestRun({ inspect: false, refreshExplorer: true }).catch((err) => {
+        setNotice(byId("detail_notice"), "error", String(err && err.message ? err.message : err));
+      });
+    });
+    byId("quick_run_keyword").addEventListener("keydown", (evt) => {
+      if (evt.key !== "Enter") return;
+      quickFindLatestRun({ inspect: true, refreshExplorer: false }).catch((err) => {
+        setNotice(byId("detail_notice"), "error", String(err && err.message ? err.message : err));
+      });
+    });
     byId("load_recent_run_btn").addEventListener("click", () => {
       inspectFromRecentSelect().catch((err) => {
         setNotice(byId("detail_notice"), "error", String(err && err.message ? err.message : err));
@@ -5273,6 +6758,8 @@ __MODE_FILTER_OPTIONS__
         rerenderExplorerDistributionsFromState();
       }, 120);
     });
+    document.addEventListener("click", onUxDocumentClick, true);
+    window.addEventListener("scroll", onUxScroll, { passive: true });
 
     const preferredModes = ["paired_nooption_singlex", "singlex_baseline", "nooption_baseline"];
     const modeSelect = byId("mode");
@@ -5284,6 +6771,8 @@ __MODE_FILTER_OPTIONS__
     updateModeHelp();
     updateCompareExportButtons();
     applyRunsCompactView();
+    resetUxBench();
+    renderExplorerFocusRunSnapshot(null, "");
 
     refreshHealth();
     loadDatasetConfig().then(() => {

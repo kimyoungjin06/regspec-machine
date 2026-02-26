@@ -1129,20 +1129,16 @@ def main() -> int:
                     cmd.extend(["--scan-max-features", str(int(args.scan_max_features))])
                 cmd.extend(
                     [
-                        "--extra-arg",
-                        "--split-seed",
-                        "--extra-arg",
-                        str(seed),
-                        "--extra-arg",
-                        "--bootstrap-seed",
-                        "--extra-arg",
-                        str(seed),
+                        "--extra-arg=--split-seed",
+                        f"--extra-arg={seed}",
+                        "--extra-arg=--bootstrap-seed",
+                        f"--extra-arg={seed}",
                     ]
                 )
                 for extra in args.extra_arg:
                     text = str(extra).strip()
                     if text:
-                        cmd.extend(["--extra-arg", text])
+                        cmd.append(f"--extra-arg={text}")
                 print(f"  [{idx}/{len(pending_jobs)}] " + " ".join(cmd))
             return 0
 
@@ -1193,20 +1189,16 @@ def main() -> int:
                 cmd.extend(["--scan-max-features", str(int(args.scan_max_features))])
             cmd.extend(
                 [
-                    "--extra-arg",
-                    "--split-seed",
-                    "--extra-arg",
-                    str(seed),
-                    "--extra-arg",
-                    "--bootstrap-seed",
-                    "--extra-arg",
-                    str(seed),
+                    "--extra-arg=--split-seed",
+                    f"--extra-arg={seed}",
+                    "--extra-arg=--bootstrap-seed",
+                    f"--extra-arg={seed}",
                 ]
             )
             for extra in args.extra_arg:
                 text = str(extra).strip()
                 if text:
-                    cmd.extend(["--extra-arg", text])
+                    cmd.append(f"--extra-arg={text}")
 
             print(
                 f"[overnight] [{idx}/{len(pending_jobs)}] seed={seed} n_bootstrap={n_bootstrap} run_id={child_run_id}"
@@ -1293,6 +1285,11 @@ def main() -> int:
             and str(row.get("job_key", "")).strip()
         }
         pending_after = max(0, int(len(jobs) - len(completed_keys_final)))
+        checkpoint_plan = checkpoint_payload.get("plan")
+        if isinstance(checkpoint_plan, dict):
+            checkpoint_plan["jobs_total"] = int(len(jobs))
+            checkpoint_plan["jobs_completed"] = int(len(completed_keys_final))
+            checkpoint_plan["jobs_pending"] = int(pending_after)
         aggregate["n_jobs_total"] = int(len(jobs))
         aggregate["n_jobs_completed"] = int(len(completed_keys_final))
         aggregate["n_jobs_pending"] = int(pending_after)

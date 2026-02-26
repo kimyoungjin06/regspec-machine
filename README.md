@@ -29,14 +29,21 @@
 - `modules/03_regspec_machine/scripts/run_module_03.sh`
 - migration smoke: `modules/03_regspec_machine/scripts/smoke_module_03_migration_paths.sh`
 - internal dump: `modules/03_regspec_machine/scripts/create_module_03_dataset_dump.sh`
+- UI journey smoke: `modules/03_regspec_machine/scripts/ui/run_ux_journey_smoke.py`
 
 예시:
 ```bash
 ./modules/03_regspec_machine/scripts/run_module_03.sh plan
 RUN_ID=phase_b_regspec_pair_20260224 ./modules/03_regspec_machine/scripts/run_module_03.sh paired --exec
+RUN_ID=phase_b_regspec_overnight_20260225 \
+OVERNIGHT_MAX_HOURS=8 \
+OVERNIGHT_SEED_GRID=20260219,20260220,20260221,20260222 \
+OVERNIGHT_BOOTSTRAP_LADDER=49,99,199 \
+./modules/03_regspec_machine/scripts/run_module_03.sh overnight --exec
 TAG=20260224v1 ./modules/03_regspec_machine/scripts/run_module_03.sh migration-smoke --exec
 TAG=20260224v1 ./modules/03_regspec_machine/scripts/run_module_03.sh contract-ci --exec
 TAG=20260224 ./modules/03_regspec_machine/scripts/run_module_03.sh dump-internal --exec
+UI_BASE_URL=http://127.0.0.1:8010/ui ./modules/03_regspec_machine/scripts/run_module_03.sh ui-journey-smoke --exec
 ```
 
 ## Compatibility

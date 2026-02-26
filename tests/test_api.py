@@ -410,10 +410,17 @@ def test_api_ui_endpoint_serves_html_console() -> None:
     assert resp.status_code == 200
     assert "RegSpec-Machine Console" in resp.text
     assert "Load Previous Results (Recommended)" in resp.text
+    assert "Primary Workflow" in resp.text
+    assert "resume_latest_workspace_btn" in resp.text
+    assert "workflow_notice" in resp.text
+    assert "nav_to_explorer_btn" in resp.text
+    assert "nav_to_run_details_btn" in resp.text
+    assert "nav_to_saved_reports_btn" in resp.text
     assert "load_prev_refresh_btn" in resp.text
     assert "load_prev_latest_run_btn" in resp.text
     assert "load_prev_latest_report_btn" in resp.text
     assert "load_prev_data_config_btn" in resp.text
+    assert "load_prev_resume_workspace_btn" in resp.text
     assert "/runs" in resp.text
     assert "/review" in resp.text
     assert "review_cards" in resp.text
@@ -463,6 +470,13 @@ def test_api_ui_endpoint_serves_html_console() -> None:
     assert "explorer_best_qp_scatter" in resp.text
     assert "explorer_best_qp_meta" in resp.text
     assert "explorer_best_qp_hover" in resp.text
+    assert "explorer_focus_apply_filter_btn" in resp.text
+    assert "explorer_focus_inspect_run_btn" in resp.text
+    assert "explorer_focus_run_notice" in resp.text
+    assert "explorer_focus_run_tbody" in resp.text
+    assert "explorer_focus_auto_inspect" in resp.text
+    assert "explorer_focus_auto_jump" in resp.text
+    assert "explorer_focus_apply_inspect_btn" in resp.text
     assert "explorer_pair_tbody" in resp.text
     assert "explorer_cluster_tbody" in resp.text
     assert "explorer_cluster_filter_text" in resp.text
