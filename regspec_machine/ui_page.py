@@ -495,9 +495,10 @@ def build_ui_page_html(*, run_modes: Iterable[str]) -> str:
     .explorer-joint-grid {
       margin-top: 8px;
       display: grid;
-      grid-template-columns: minmax(196px, 220px) minmax(420px, 560px) minmax(146px, 170px);
+      /* Keep the joint view compact: stable scatter size + rail uses spare width. */
+      grid-template-columns: minmax(176px, 240px) minmax(320px, 420px) minmax(160px, 220px);
       grid-template-rows: auto 1fr;
-      gap: 6px;
+      gap: 5px;
       align-items: stretch;
       width: 100%;
       justify-content: center;
@@ -611,8 +612,8 @@ def build_ui_page_html(*, run_modes: Iterable[str]) -> str:
     }
     #section_explorer_sweep #explorer_kpi_cards {
       margin-top: 0;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 6px;
+      grid-template-columns: 1fr;
+      gap: 5px;
     }
     #section_explorer_sweep .explorer-kpi-rail .kpi-card {
       display: block;
@@ -754,6 +755,9 @@ def build_ui_page_html(*, run_modes: Iterable[str]) -> str:
     #explorer_best_qp_hover {
       margin-top: 4px;
       min-height: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     .equation-factor-box {
       min-height: 92px;
@@ -1352,6 +1356,33 @@ __MODE_FILTER_OPTIONS__
           </div>
         </div>
       </details>
+      <div class="explorer-joint-grid">
+        <div class="viz-card explorer-kpi-rail">
+          <h3>Sweep KPI</h3>
+          <div class="kpi-grid" id="explorer_kpi_cards"></div>
+        </div>
+        <div class="viz-card explorer-joint-top">
+          <h3>Best q Distribution (x-axis)</h3>
+          <div id="explorer_best_q_marginal" class="marginal-wrap"></div>
+        </div>
+        <div class="viz-card explorer-joint-main">
+          <h3>Best q vs Best p Scatter (run-level)</h3>
+          <div id="explorer_best_qp_scatter" class="scatter-wrap"></div>
+          <div id="explorer_best_qp_meta" class="footer-note">points: 0</div>
+          <div id="explorer_best_qp_hover" class="hint-box">hover/click a point to inspect run-level metrics</div>
+        </div>
+        <div class="viz-card explorer-joint-kpi">
+          <h3>Joint Summary</h3>
+          <div id="explorer_best_qp_joint_kpis" class="joint-kpi-grid"></div>
+          <div class="toolbar" style="margin-top:6px;">
+            <button id="explorer_joint_clear_btn" class="ghost">Clear Joint Filters</button>
+          </div>
+        </div>
+        <div class="viz-card explorer-joint-side">
+          <h3>Best p Distribution (y-axis)</h3>
+          <div id="explorer_best_p_marginal" class="marginal-wrap side"></div>
+        </div>
+      </div>
       <div class="explorer-focus-grid">
         <div class="viz-card">
           <h3>Focus Candidate</h3>
@@ -1403,33 +1434,6 @@ __MODE_FILTER_OPTIONS__
           </div>
         </div>
       </details>
-      <div class="explorer-joint-grid">
-        <div class="viz-card explorer-kpi-rail">
-          <h3>Sweep KPI</h3>
-          <div class="kpi-grid" id="explorer_kpi_cards"></div>
-        </div>
-        <div class="viz-card explorer-joint-top">
-          <h3>Best q Distribution (x-axis)</h3>
-          <div id="explorer_best_q_marginal" class="marginal-wrap"></div>
-        </div>
-        <div class="viz-card explorer-joint-main">
-          <h3>Best q vs Best p Scatter (run-level)</h3>
-          <div id="explorer_best_qp_scatter" class="scatter-wrap"></div>
-          <div id="explorer_best_qp_meta" class="footer-note">points: 0</div>
-          <div id="explorer_best_qp_hover" class="hint-box">hover/click a point to inspect run-level metrics</div>
-        </div>
-        <div class="viz-card explorer-joint-kpi">
-          <h3>Joint Summary</h3>
-          <div id="explorer_best_qp_joint_kpis" class="joint-kpi-grid"></div>
-          <div class="toolbar" style="margin-top:6px;">
-            <button id="explorer_joint_clear_btn" class="ghost">Clear Joint Filters</button>
-          </div>
-        </div>
-        <div class="viz-card explorer-joint-side">
-          <h3>Best p Distribution (y-axis)</h3>
-          <div id="explorer_best_p_marginal" class="marginal-wrap side"></div>
-        </div>
-      </div>
       <details class="viz-card fold-card explorer-table-fold" id="explorer_tables_fold">
         <summary>Top Combinations / Top Key Factors</summary>
         <div class="fold-body">
@@ -4838,10 +4842,12 @@ __MODE_FILTER_OPTIONS__
         if (!msg) {
           hover.classList.add("hidden");
           hover.textContent = "";
+          hover.title = "";
           return;
         }
         hover.classList.remove("hidden");
         hover.textContent = msg;
+        hover.title = msg;
       };
       setHoverMessage("");
 
@@ -4886,23 +4892,15 @@ __MODE_FILTER_OPTIONS__
           (pointMatchesExplorerJointSelection(pt, selection) ? 6.5 : 5.0) +
           Math.min(3.2, Math.max(0, Number(pt.validated || 0)) * 0.34)
         );
-        const hoverText = points.map((pt) =>
-          String(pt.run_id || "-") +
-          " [" + String(pt.mode || "-") + "]" +
-          "<br>q=" + fmt(Number(pt.q), 4) +
-          "<br>p=" + fmt(Number(pt.p), 4) +
-          "<br>validated=" + fmt(Number(pt.validated), 0)
-        );
         const trace = {
           type: "scatter",
           mode: "markers",
           x: points.map((pt) => Number(pt.q)),
           y: points.map((pt) => Number(pt.p)),
           customdata: pointIdx,
-          text: hoverText,
-          // Keep plotly hover events, but suppress native hover labels that cover the chart.
-          hoverinfo: "none",
-          hovertemplate: null,
+          // Keep plotly hover/click events but suppress hover labels (we render our own hint-box).
+          hoverinfo: "skip",
+          hovertemplate: "<extra></extra>",
           marker: {
             size: markerSize,
             color: markerColor,
