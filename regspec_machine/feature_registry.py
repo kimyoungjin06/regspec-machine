@@ -194,7 +194,8 @@ def build_feature_registry(
         variation_expected = _variation_label(share_variation)
         transform = _default_transform(df[col])
 
-        role = "control_only" if col in CONTROL_ONLY_FEATURES else "key_factor_candidate"
+        suggested_as_control = int(col in CONTROL_ONLY_FEATURES)
+        role = "key_factor_candidate"
         block_reasons: List[str] = []
         if timing_label != "pre_treatment":
             block_reasons.append("timing_not_pre_treatment")
@@ -202,8 +203,6 @@ def build_feature_registry(
             block_reasons.append("low_within_event_variation")
         if share_nonmissing < min_nonmissing_share:
             block_reasons.append("low_nonmissing_share")
-        if role != "key_factor_candidate":
-            block_reasons.append("control_only_feature")
         allowed = 1 if len(block_reasons) == 0 else 0
 
         rows.append(
@@ -212,6 +211,7 @@ def build_feature_registry(
                 "data_source": data_source,
                 "timing_label": timing_label,
                 "role": role,
+                "suggested_as_control": suggested_as_control,
                 "allowed_in_scan": allowed,
                 "within_event_variation_expected": variation_expected,
                 "share_events_with_variation": round(share_variation, 6),
