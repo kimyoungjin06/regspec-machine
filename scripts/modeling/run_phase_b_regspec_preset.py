@@ -28,14 +28,19 @@ def _detect_repo_root(start: Path) -> Path:
 
 
 ROOT = _detect_repo_root(Path(__file__).resolve().parent)
-RUNNER = (
+_RUNNER_CANDIDATES = (
     ROOT
     / "modules"
     / "03_regspec_machine"
     / "scripts"
     / "modeling"
-    / "run_phase_b_bikard_machine_scientist_scan.py"
+    / "run_phase_b_bikard_machine_scientist_scan.py",
+    ROOT
+    / "scripts"
+    / "modeling"
+    / "run_phase_b_bikard_machine_scientist_scan.py",
 )
+RUNNER = next((p for p in _RUNNER_CANDIDATES if p.is_file()), _RUNNER_CANDIDATES[0])
 
 
 def _utc_ymd() -> str:
@@ -970,6 +975,10 @@ def main() -> int:
     run_id = str(args.run_id).strip()
     if not run_id:
         run_id = f"phase_b_bikard_keyfactor_scan_{mode}_{ymd}"
+
+    if not RUNNER.is_file():
+        tried = ", ".join(str(p) for p in _RUNNER_CANDIDATES)
+        raise FileNotFoundError(f"runner script not found (tried: {tried})")
 
     if mode == "overnight_validation":
         max_hours = float(args.max_hours)

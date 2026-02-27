@@ -9,7 +9,7 @@ import pytest
 
 
 def _load_phase_b_runner_module():
-    root = Path(__file__).resolve().parents[4]
+    root = Path(__file__).resolve().parents[1]
     runner_path = root / "scripts" / "modeling" / "run_phase_b_bikard_machine_scientist_scan.py"
     if not runner_path.exists():
         pytest.skip("phase-b runner script is not available in this environment")

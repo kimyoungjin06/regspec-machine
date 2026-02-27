@@ -22,7 +22,7 @@ def _load_module(module_path: Path, name: str):
 
 
 def _root() -> Path:
-    return Path(__file__).resolve().parents[4]
+    return Path(__file__).resolve().parents[1]
 
 
 def test_disk_preflight_helper_pass_and_fail() -> None:
