@@ -44,6 +44,13 @@ from regspec_machine import (  # noqa: E402
     select_shortlist_features_from_top_models,
     sha256_json,
 )
+from regspec_machine.feature_registry import (  # noqa: E402
+    IDENTIFIER_COLUMNS,
+    classify_timing,
+    is_outcome_like,
+    within_event_variation_label,
+    within_event_variation_metrics,
+)
 from regspec_machine.reporting import (  # noqa: E402
     utc_timestamp,
     write_csv,
@@ -211,7 +218,12 @@ def parse_args() -> argparse.Namespace:
     )
     p.add_argument("--categorical-max-levels-per-feature", type=int, default=5)
     p.add_argument("--categorical-min-level-count", type=int, default=10)
-    p.add_argument("--categorical-max-new-features", type=int, default=0)
+    p.add_argument(
+        "--categorical-max-new-features",
+        type=int,
+        default=200,
+        help="global cap on onehot features generated (0 => no cap; use with care)",
+    )
     p.add_argument("--registry-min-variation-share", type=float, default=0.10)
     p.add_argument("--registry-min-nonmissing-share", type=float, default=0.80)
     p.add_argument("--registry-build-scope", choices=("discovery", "all"), default="discovery")
@@ -2652,7 +2664,7 @@ def _augment_registry_with_expressions(
     return out_data, out_registry, meta
 
 
-def _sanitize_level_token(value: object) -> str:
+def _sanitize_level_token(value: object, *, max_len: int = 48) -> str:
     text = str(value or "").strip().lower()
     text = re.sub(r"[^a-z0-9]+", "_", text)
     text = re.sub(r"_+", "_", text).strip("_")
@@ -2660,29 +2672,40 @@ def _sanitize_level_token(value: object) -> str:
         return "empty"
     if text[0].isdigit():
         text = f"v_{text}"
-    return text[:48]
+    max_len_int = max(int(max_len), 8)
+    return text[:max_len_int]
 
 
 def _augment_registry_with_categorical(
     *,
     data: pd.DataFrame,
     registry: List[Dict[str, object]],
+    build_scope_df: pd.DataFrame,
     mode: str,
     max_levels_per_feature: int,
     min_level_count: int,
     max_new_features: int,
+    min_variation_share: float,
+    min_nonmissing_share: float,
 ) -> tuple[pd.DataFrame, List[Dict[str, object]], Dict[str, object]]:
+    build_df = build_scope_df if isinstance(build_scope_df, pd.DataFrame) else data
+    mode = str(mode or "").strip().lower()
     if mode != "onehot":
         return data, registry, {
             "categorical_encoding_mode": mode,
             "categorical_max_levels_per_feature": int(max_levels_per_feature),
             "categorical_min_level_count": int(min_level_count),
             "categorical_max_new_features": int(max_new_features),
+            "categorical_min_variation_share": float(min_variation_share),
+            "categorical_min_nonmissing_share": float(min_nonmissing_share),
             "n_categorical_source_features": 0,
             "n_generated_features": 0,
             "n_skipped_existing_name": 0,
             "n_skipped_low_level_count": 0,
             "n_skipped_numeric_like": 0,
+            "n_skipped_not_categorical_dtype": 0,
+            "n_skipped_not_pretreatment": 0,
+            "n_skipped_identifier_or_outcome": 0,
         }
 
     out_data = data.copy()
@@ -2690,23 +2713,38 @@ def _augment_registry_with_categorical(
     cap = int(max_new_features) if int(max_new_features) > 0 else 0
     max_levels = int(max_levels_per_feature) if int(max_levels_per_feature) > 0 else 0
     min_count = max(int(min_level_count), 1)
+    min_var = float(min_variation_share)
+    min_nonmissing = float(min_nonmissing_share)
 
     source_features: List[str] = []
-    seen_sources: set[str] = set()
-    for row in out_registry:
-        feat = str(row.get("feature_name", "")).strip()
-        if not feat or feat in seen_sources:
+    skipped_not_categorical_dtype = 0
+    skipped_not_pretreatment = 0
+    skipped_identifier_or_outcome = 0
+    for col in sorted(build_df.columns.astype(str).tolist()):
+        feat = str(col).strip()
+        if not feat:
             continue
         if feat.startswith(("expr__", "cat__")):
             continue
-        if int(row.get("allowed_in_scan", 0)) != 1:
-            continue
-        if str(row.get("timing_label", "")).strip() != "pre_treatment":
+        if feat in IDENTIFIER_COLUMNS or is_outcome_like(feat):
+            skipped_identifier_or_outcome += 1
             continue
         if feat not in out_data.columns:
             continue
-        seen_sources.add(feat)
+        timing_label = str(classify_timing(feat)).strip()
+        if timing_label != "pre_treatment":
+            skipped_not_pretreatment += 1
+            continue
+        raw_build = build_df[feat]
+        if pd.api.types.is_numeric_dtype(raw_build) or pd.api.types.is_bool_dtype(raw_build):
+            skipped_not_categorical_dtype += 1
+            continue
         source_features.append(feat)
+
+    def _clean_values(raw: pd.Series) -> pd.Series:
+        values = raw.astype(str).str.strip()
+        missing_mask = values.eq("") | values.str.lower().isin({"na", "nan", "none", "null"})
+        return values.where(~missing_mask, other=np.nan)
 
     generated_rows: List[Dict[str, object]] = []
     generated_names: List[str] = []
@@ -2718,53 +2756,90 @@ def _augment_registry_with_categorical(
     for feat in source_features:
         if cap > 0 and len(generated_rows) >= cap:
             break
-        raw = out_data[feat]
-        numeric_probe = pd.to_numeric(raw, errors="coerce")
-        numeric_like_ratio = float(numeric_probe.notna().sum()) / float(max(len(raw), 1))
+        raw_build = build_df[feat]
+        numeric_probe = pd.to_numeric(raw_build, errors="coerce")
+        numeric_like_ratio = float(numeric_probe.notna().sum()) / float(max(len(raw_build), 1))
         if numeric_like_ratio >= 0.98:
             skipped_numeric_like += 1
             continue
 
-        values = raw.astype(str).str.strip()
-        missing_mask = values.eq("") | values.str.lower().isin({"na", "nan", "none", "null"})
-        values = values.where(~missing_mask, other=np.nan)
-        vc = values.value_counts(dropna=True)
+        values_build = _clean_values(raw_build)
+        vc = values_build.value_counts(dropna=True)
         if vc.empty:
             continue
 
-        level_items = [(str(level), int(cnt)) for level, cnt in vc.items() if int(cnt) >= min_count]
+        level_items = [
+            (str(level), int(cnt))
+            for level, cnt in vc.items()
+            if int(cnt) >= int(min_count)
+        ]
+        level_items.sort(key=lambda x: (-int(x[1]), str(x[0])))
         if max_levels > 0:
             level_items = level_items[:max_levels]
         if not level_items:
             skipped_low_level += 1
             continue
 
+        values_full = _clean_values(out_data[feat])
         n_added_this_feature = 0
         for level, cnt in level_items:
             if cap > 0 and len(generated_rows) >= cap:
                 break
-            token = _sanitize_level_token(level)
+            # Stable onehot token: sanitized + short hash (avoid collisions across similar labels).
+            level_hash = hashlib.sha256(str(level).encode("utf-8")).hexdigest()[:8]
+            suffix = f"_h{level_hash}"
+            base = _sanitize_level_token(level, max_len=max(8, 48 - len(suffix)))
+            token = f"{base}{suffix}"
             cat_name = f"cat__{feat}__{token}"
             if cat_name in out_data.columns:
                 skipped_existing += 1
                 continue
-            vec = (values == level).astype(float)
-            positives = int(vec.sum())
-            if positives < min_count or positives >= len(vec):
+
+            vec = (values_full == level).astype(float)
+            vec = vec.where(values_full.notna(), other=np.nan)
+            nonmissing = int(vec.notna().sum())
+            positives = int((vec == 1.0).sum())
+            if nonmissing <= 0 or positives < min_count or positives >= nonmissing:
                 skipped_low_level += 1
                 continue
-            out_data[cat_name] = vec
+
+            # Build-scope within-event variation gates (align candidate pool with discovery-only registry build).
+            vec_build = (values_build == level).astype(float)
+            vec_build = vec_build.where(values_build.notna(), other=np.nan)
+            metric_df = build_df[["event_id"]].copy()
+            metric_df[cat_name] = vec_build.astype(float)
+            share_var, share_nonmiss, n_var_events, n_two_alt = within_event_variation_metrics(
+                metric_df, feature_col=cat_name
+            )
+            variation_expected = within_event_variation_label(float(share_var))
+            block_reasons: List[str] = []
+            timing_label = "pre_treatment"
+            if float(share_var) < float(min_var):
+                block_reasons.append("low_within_event_variation")
+            if float(share_nonmiss) < float(min_nonmissing):
+                block_reasons.append("low_nonmissing_share")
+            allowed = 1 if not block_reasons else 0
+
+            out_data[cat_name] = vec.astype(float)
             generated_rows.append(
                 {
                     "feature_name": cat_name,
                     "data_source": "derived_categorical_onehot",
-                    "timing_label": "pre_treatment",
-                    "allowed_in_scan": 1,
-                    "block_reasons": [],
+                    "timing_label": timing_label,
+                    "role": "key_factor_candidate",
+                    "allowed_in_scan": int(allowed),
+                    "within_event_variation_expected": variation_expected,
+                    "share_events_with_variation": round(float(share_var), 6),
+                    "share_events_nonmissing": round(float(share_nonmiss), 6),
+                    "n_events_with_variation": int(n_var_events),
+                    "n_two_alt_events": int(n_two_alt),
+                    "transform": "none",
+                    "missing_policy": "drop",
+                    "block_reasons": block_reasons,
                     "categorical_encoding_mode": "onehot",
                     "categorical_source_feature": feat,
                     "categorical_level_value": level,
-                    "categorical_level_count": positives,
+                    "categorical_level_count": int(cnt),
                     "categorical_generated": 1,
                 }
             )
@@ -2779,11 +2854,16 @@ def _augment_registry_with_categorical(
         "categorical_max_levels_per_feature": int(max_levels_per_feature),
         "categorical_min_level_count": int(min_level_count),
         "categorical_max_new_features": int(max_new_features),
+        "categorical_min_variation_share": float(min_var),
+        "categorical_min_nonmissing_share": float(min_nonmissing),
         "n_categorical_source_features": len(source_features),
         "n_generated_features": len(generated_rows),
         "n_skipped_existing_name": int(skipped_existing),
         "n_skipped_low_level_count": int(skipped_low_level),
         "n_skipped_numeric_like": int(skipped_numeric_like),
+        "n_skipped_not_categorical_dtype": int(skipped_not_categorical_dtype),
+        "n_skipped_not_pretreatment": int(skipped_not_pretreatment),
+        "n_skipped_identifier_or_outcome": int(skipped_identifier_or_outcome),
         "encoded_feature_level_counts": encoded_feature_levels,
         "generated_feature_names": generated_names[:50],
     }
@@ -3301,10 +3381,13 @@ def main() -> int:
     data, registry, categorical_meta = _augment_registry_with_categorical(
         data=data,
         registry=registry,
+        build_scope_df=registry_build_df,
         mode=str(args.categorical_encoding_mode),
         max_levels_per_feature=int(args.categorical_max_levels_per_feature),
         min_level_count=int(args.categorical_min_level_count),
         max_new_features=int(args.categorical_max_new_features),
+        min_variation_share=float(args.registry_min_variation_share),
+        min_nonmissing_share=float(args.registry_min_nonmissing_share),
     )
     registry_filter_df = (
         data[data["split_role"] == "discovery"].copy()

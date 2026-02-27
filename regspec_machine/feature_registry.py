@@ -74,6 +74,11 @@ def _is_outcome_like(name: str) -> bool:
     return any(token in lower for token in OUTCOME_NAME_PATTERNS)
 
 
+def is_outcome_like(name: str) -> bool:
+    """Public wrapper for outcome-like column detection."""
+    return _is_outcome_like(name)
+
+
 def _classify_timing(name: str) -> str:
     if _is_outcome_like(name):
         return "post_treatment_or_outcome_proxy"
@@ -90,6 +95,11 @@ def _classify_timing(name: str) -> str:
     if name in DYAD_BASE_PRETREATMENT_COLUMNS:
         return "pre_treatment"
     return "unknown"
+
+
+def classify_timing(name: str) -> str:
+    """Public wrapper for pre/post/unknown timing classification."""
+    return _classify_timing(name)
 
 
 def _variation_metrics(
@@ -121,12 +131,24 @@ def _variation_metrics(
     return share_variation, share_nonmissing, n_variation_events, n_two_alt_events
 
 
+def within_event_variation_metrics(
+    df: pd.DataFrame, *, feature_col: str, event_col: str = "event_id"
+) -> Tuple[float, float, int, int]:
+    """Compute within-event variation and nonmissing shares for dyad (2-alt) events."""
+    return _variation_metrics(df, feature_col=feature_col, event_col=event_col)
+
+
 def _variation_label(share_variation: float) -> str:
     if share_variation >= 0.60:
         return "high"
     if share_variation >= 0.30:
         return "medium"
     return "low"
+
+
+def within_event_variation_label(share_variation: float) -> str:
+    """Public wrapper for the qualitative within-event variation label."""
+    return _variation_label(share_variation)
 
 
 def _default_transform(series: pd.Series) -> str:
