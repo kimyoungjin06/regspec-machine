@@ -12,6 +12,8 @@ This backlog is ordered by governance impact and baseline value.
 - Acceptance:
   - `./scripts/run_module_03.sh contract-ci --exec` passes.
   - Both baseline runs produce non-empty `scan_runs` and `top_models` outputs (or fail with actionable reasons).
+- Status: Done (2026-02-27).
+- Implemented: `scripts/run_module_03.sh contract-ci --exec` now runs a fast paired smoke (`paired_nooption_singlex`) when Phase-B inputs are present.
 
 ### T1. Fixed/Required Variables (Anchored Spec Mode)
 - Goal: allow users to **fix a mandatory variable set** (controls and/or anchor factor) and explore incremental additions.
@@ -23,6 +25,9 @@ This backlog is ordered by governance impact and baseline value.
   - Config hash changes when fixed controls change.
   - UI and run summary show "controls used" clearly.
   - Guardrails: if fixed controls are not estimable under the estimator (no within-event variation), surface a clear error or skip reason.
+- Notes:
+  - Fixed base-controls are supported (`--base-controls`, `--base-controls-strict`) and are included in `config_hash` via `controls_meta`.
+  - Anchor-factor-as-mandatory-regressor (scan incremental additions given fixed anchor) is still a candidate future upgrade.
 
 ### T2. Explorer Sweep UX Compression (High ROI)
 - Goal: reduce scroll, reduce whitespace, make discovery -> inspect loop faster.
