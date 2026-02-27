@@ -24,6 +24,9 @@ from .contracts import (
 
 
 PRESET_SCRIPT_RELATIVE = Path("scripts/modeling/run_phase_b_regspec_preset.py")
+PRESET_SCRIPT_RELATIVE_FALLBACKS = (
+    Path("modules/03_regspec_machine/scripts/modeling/run_phase_b_regspec_preset.py"),
+)
 
 
 def _utc_now_isoz() -> str:
@@ -109,7 +112,7 @@ def _expected_overnight_outputs(run_id: str) -> Dict[str, str]:
 
 def _resolve_workspace_root(
     workspace_root: Optional[Path | str],
-    script_relative: Path,
+    script_relatives: Sequence[Path],
 ) -> Path:
     if workspace_root is not None:
         return Path(workspace_root).expanduser().resolve()
@@ -124,9 +127,10 @@ def _resolve_workspace_root(
             if candidate in visited:
                 continue
             visited.add(candidate)
-            if (candidate / script_relative).is_file():
+            if any((candidate / rel).is_file() for rel in script_relatives):
                 return candidate
-    raise FileNotFoundError(f"failed to resolve workspace root for script: {script_relative}")
+    rel_list = ", ".join(str(r) for r in script_relatives)
+    raise FileNotFoundError(f"failed to resolve workspace root for scripts: {rel_list}")
 
 
 @dataclass(frozen=True)
@@ -177,8 +181,20 @@ class PresetEngine:
             script_path = script_rel.resolve()
             root = script_path.parents[2] if len(script_path.parents) >= 3 else script_path.parent
         else:
-            root = _resolve_workspace_root(workspace_root, script_rel)
-            script_path = (root / script_rel).resolve()
+            candidates = [script_rel]
+            for fallback in PRESET_SCRIPT_RELATIVE_FALLBACKS + (PRESET_SCRIPT_RELATIVE,):
+                if fallback not in candidates:
+                    candidates.append(fallback)
+            root = _resolve_workspace_root(workspace_root, candidates)
+            script_path = None
+            for rel in candidates:
+                path = (root / rel).resolve()
+                if path.is_file():
+                    script_path = path
+                    break
+            if script_path is None:
+                tried = ", ".join(str((root / rel).resolve()) for rel in candidates)
+                raise FileNotFoundError(f"preset script not found (tried: {tried})")
         if not script_path.is_file():
             raise FileNotFoundError(f"preset script not found: {script_path}")
         self.workspace_root = root

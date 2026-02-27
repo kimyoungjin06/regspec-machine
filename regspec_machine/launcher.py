@@ -10,6 +10,7 @@ import webbrowser
 
 from .api import create_app
 from .contracts import RUN_MODES
+from .module_input import get_git_commit
 from .ui_page import build_ui_page_html
 
 
@@ -145,6 +146,19 @@ def main(
 
     if config.open_browser:
         webbrowser.open(config.ui_url)
+
+    try:
+        import regspec_machine as pkg
+
+        pkg_path = Path(getattr(pkg, "__file__", "") or "").resolve()
+        if pkg_path.name:
+            print(f"[regspec-console] package: {pkg_path}")
+    except Exception:
+        pass
+
+    commit = get_git_commit(cwd=Path(__file__).resolve().parents[1])
+    if commit:
+        print(f"[regspec-console] git_commit: {commit}")
 
     print(f"[regspec-console] serving: {config.base_url}")
     print(f"[regspec-console] UI: {config.ui_url}")

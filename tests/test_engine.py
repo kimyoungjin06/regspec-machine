@@ -15,6 +15,21 @@ def _mk_workspace(tmp_path: Path) -> Path:
     return root
 
 
+def _mk_workspace_with_module_preset(tmp_path: Path) -> Path:
+    root = tmp_path / "workspace_mod"
+    preset = (
+        root
+        / "modules"
+        / "03_regspec_machine"
+        / "scripts"
+        / "modeling"
+        / "run_phase_b_regspec_preset.py"
+    )
+    preset.parent.mkdir(parents=True, exist_ok=True)
+    preset.write_text("#!/usr/bin/env python3\n", encoding="utf-8")
+    return root
+
+
 def test_engine_build_command_includes_contract_options(tmp_path: Path) -> None:
     root = _mk_workspace(tmp_path)
     engine = PresetEngine(
@@ -41,6 +56,17 @@ def test_engine_build_command_includes_contract_options(tmp_path: Path) -> None:
     assert "--paired-legacy-sync-validation" in cmd
     assert "--extra-arg" in cmd and "--foo" in cmd and "--bar=1" in cmd
     assert cmd[-1] == "--dry-run"
+
+
+def test_engine_resolves_module_relative_preset_script(tmp_path: Path) -> None:
+    root = _mk_workspace_with_module_preset(tmp_path)
+    engine = PresetEngine(
+        workspace_root=root,
+        command_executor=lambda _cmd, _cwd: CommandResult(returncode=0),
+    )
+    req = RunRequestContract.from_payload({"mode": "singlex_baseline", "run_id": "ut_script_path"})
+    cmd = engine.build_command(req, dry_run=True)
+    assert "modules/03_regspec_machine" in str(cmd[1]).replace("\\", "/")
 
 
 def test_engine_execute_singlex_reads_run_summary_payload(tmp_path: Path) -> None:

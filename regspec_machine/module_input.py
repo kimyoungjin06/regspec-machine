@@ -87,15 +87,21 @@ def _prepare_base_columns(df: pd.DataFrame) -> pd.DataFrame:
         pd.to_numeric(d["reference_count_dik_evidence_use"], errors="coerce").fillna(0).astype(int)
     )
 
-    recency_years: List[Optional[float]] = []
-    for _, row in d.iterrows():
-        pub_d = parse_date(row.get("pub_date", ""))
-        policy_d = parse_date(row.get("policy_published_on", ""))
-        if pub_d is None or policy_d is None:
-            recency_years.append(None)
-            continue
-        recency_years.append((policy_d - pub_d).days / 365.25)
-    d["recency_years_alt"] = recency_years
+    pub_text = (
+        d["pub_date"]
+        .astype(str)
+        .str.slice(0, 10)
+        .str.replace("/", "-", regex=False)
+    )
+    policy_text = (
+        d["policy_published_on"]
+        .astype(str)
+        .str.slice(0, 10)
+        .str.replace("/", "-", regex=False)
+    )
+    pub_dates = pd.to_datetime(pub_text, errors="coerce", format="%Y-%m-%d")
+    policy_dates = pd.to_datetime(policy_text, errors="coerce", format="%Y-%m-%d")
+    d["recency_years_alt"] = (policy_dates - pub_dates).dt.days.astype("float64") / 365.25
     return d
 
 
