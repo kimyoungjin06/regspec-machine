@@ -70,6 +70,10 @@ This backlog is ordered by governance impact and baseline value.
 - Acceptance:
   - No-degeneracy (equivalence hash) applies to derived features.
   - Complexity penalty and caps prevent runaway.
+- Status: Done (2026-02-27).
+- Implemented: expression grammar modes (`--expression-registry-mode signed_log1p|signed_log1p_square|ms_benchmark_lite`).
+- Implemented: hard budgets with safe defaults (`--expression-max-new-features`, `--expression-max-base-features`, `--expression-max-pairs`).
+- Implemented: build-scope aligned gates for derived expressions (within-event variation + nonmissing share) and degenerate-signature skip.
 
 ## P2 (Nice-To-Have)
 
