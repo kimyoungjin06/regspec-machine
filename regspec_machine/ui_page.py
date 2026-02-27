@@ -1523,26 +1523,54 @@ __MODE_FILTER_OPTIONS__
                 </thead>
                 <tbody id="explorer_combo_tbody"></tbody>
               </table>
-            </div>
-          <label>Top Key Factors</label>
-          <div class="run-table-wrap" style="margin-top: 8px;">
-            <table>
-              <thead>
-                <tr>
-                  <th>rank</th>
-                  <th>key_factor</th>
-                  <th>n_runs</th>
-                  <th>q_best (FDR)</th>
-                  <th>q_median (FDR)</th>
-                  <th>strong_share</th>
-                  <th>validated_share</th>
-                </tr>
-              </thead>
-              <tbody id="explorer_factor_tbody"></tbody>
-            </table>
-          </div>
-        </div>
-      </details>
+	          </div>
+	          <label>Top Key Factors</label>
+	          <div class="toolbar">
+	            <label for="explorer_factor_filter_text" style="margin:0; align-self:center;">search</label>
+	            <input id="explorer_factor_filter_text" style="width:260px;" placeholder="e.g. is_academia_origin" title="matches key_factor" />
+	            <label for="explorer_factor_sort_key" style="margin:0; align-self:center;">sort</label>
+	            <select id="explorer_factor_sort_key" style="width:auto; min-width:190px;">
+	              <option value="q_best_asc" selected>q_best (low)</option>
+	              <option value="q_best_desc">q_best (high)</option>
+	              <option value="q_median_asc">q_median (low)</option>
+	              <option value="q_median_desc">q_median (high)</option>
+	              <option value="n_runs_desc">n_runs (high)</option>
+	              <option value="n_runs_asc">n_runs (low)</option>
+	              <option value="strong_share_desc">strong_share (high)</option>
+	              <option value="strong_share_asc">strong_share (low)</option>
+	              <option value="validated_share_desc">validated_share (high)</option>
+	              <option value="validated_share_asc">validated_share (low)</option>
+	              <option value="key_factor_asc">key_factor (A-Z)</option>
+	              <option value="key_factor_desc">key_factor (Z-A)</option>
+	            </select>
+	            <label for="explorer_factor_limit" style="margin:0; align-self:center;">rows</label>
+	            <select id="explorer_factor_limit" style="width:auto; min-width:84px;">
+	              <option value="10">10</option>
+	              <option value="20" selected>20</option>
+	              <option value="50">50</option>
+	              <option value="100">100</option>
+	            </select>
+	            <button id="explorer_factor_reset_btn" class="ghost">Reset Filter</button>
+	          </div>
+	          <div id="explorer_factor_notice" class="hint-box">showing 0 / 0 factors</div>
+	          <div class="run-table-wrap" style="margin-top: 8px;">
+	            <table id="explorer_factor_table">
+	              <thead>
+	                <tr>
+	                  <th>rank</th>
+	                  <th class="sort-click" data-sort-key="key_factor" title="click to sort">key_factor</th>
+	                  <th class="sort-click" data-sort-key="n_runs" title="click to sort">n_runs</th>
+	                  <th class="sort-click" data-sort-key="q_best" title="click to sort">q_best (FDR)</th>
+	                  <th class="sort-click" data-sort-key="q_median" title="click to sort">q_median (FDR)</th>
+	                  <th class="sort-click" data-sort-key="strong_share" title="click to sort">strong_share</th>
+	                  <th class="sort-click" data-sort-key="validated_share" title="click to sort">validated_share</th>
+	                </tr>
+	              </thead>
+	              <tbody id="explorer_factor_tbody"></tbody>
+	            </table>
+	          </div>
+	        </div>
+	      </details>
       <details class="viz-card fold-card explorer-deep-dive-fold" id="explorer_deep_dive_fold">
         <summary>Deep Dive: Equation Builder / SHAP-lite / Network</summary>
         <div class="fold-body">
@@ -3121,19 +3149,23 @@ __MODE_FILTER_OPTIONS__
       }
     }
 
-    function setExplorerBusy(flag) {
-      UI_STATE.explorerBusy = Boolean(flag);
-      byId("explorer_refresh_btn").disabled = UI_STATE.explorerBusy;
-      byId("explorer_mode_scope").disabled = UI_STATE.explorerBusy;
-      byId("explorer_run_like").disabled = UI_STATE.explorerBusy;
-      byId("explorer_q_threshold").disabled = UI_STATE.explorerBusy;
-      byId("explorer_top_n").disabled = UI_STATE.explorerBusy;
-      byId("explorer_joint_clear_btn").disabled = UI_STATE.explorerBusy;
-      byId("explorer_combo_filter_text").disabled = UI_STATE.explorerBusy;
-      byId("explorer_combo_sort_key").disabled = UI_STATE.explorerBusy;
-      byId("explorer_combo_limit").disabled = UI_STATE.explorerBusy;
-      byId("explorer_combo_reset_btn").disabled = UI_STATE.explorerBusy;
-    }
+	    function setExplorerBusy(flag) {
+	      UI_STATE.explorerBusy = Boolean(flag);
+	      byId("explorer_refresh_btn").disabled = UI_STATE.explorerBusy;
+	      byId("explorer_mode_scope").disabled = UI_STATE.explorerBusy;
+	      byId("explorer_run_like").disabled = UI_STATE.explorerBusy;
+	      byId("explorer_q_threshold").disabled = UI_STATE.explorerBusy;
+	      byId("explorer_top_n").disabled = UI_STATE.explorerBusy;
+	      byId("explorer_joint_clear_btn").disabled = UI_STATE.explorerBusy;
+	      byId("explorer_combo_filter_text").disabled = UI_STATE.explorerBusy;
+	      byId("explorer_combo_sort_key").disabled = UI_STATE.explorerBusy;
+	      byId("explorer_combo_limit").disabled = UI_STATE.explorerBusy;
+	      byId("explorer_combo_reset_btn").disabled = UI_STATE.explorerBusy;
+	      byId("explorer_factor_filter_text").disabled = UI_STATE.explorerBusy;
+	      byId("explorer_factor_sort_key").disabled = UI_STATE.explorerBusy;
+	      byId("explorer_factor_limit").disabled = UI_STATE.explorerBusy;
+	      byId("explorer_factor_reset_btn").disabled = UI_STATE.explorerBusy;
+	    }
 
     function setEquationBusy(flag) {
       UI_STATE.equationBusy = Boolean(flag);
@@ -3404,39 +3436,191 @@ __MODE_FILTER_OPTIONS__
         updateExplorerComboSortHeaders();
       }
 
-    function renderExplorerFactorTable(rows) {
-      const tbody = byId("explorer_factor_tbody");
-      tbody.replaceChildren();
-      const data = Array.isArray(rows) ? rows : [];
-      if (!data.length) {
-        const tr = document.createElement("tr");
-        const td = document.createElement("td");
-        td.colSpan = 7;
-        td.textContent = "no factor rows";
-        tr.appendChild(td);
-        tbody.appendChild(tr);
-        return;
-      }
-      for (let i = 0; i < data.length; i += 1) {
-        const row = data[i] || {};
-        const tr = document.createElement("tr");
-        const cells = [
-          String(i + 1),
-          String(row.key_factor || "-"),
-          fmt(row.n_runs),
-          fmt(row.q_best, 4),
-          fmt(row.q_median, 4),
-          fmt(row.strong_share_q, 3),
-          fmt(row.validated_share, 3),
-        ];
-        for (const cell of cells) {
-          const td = document.createElement("td");
-          td.textContent = cell;
-          tr.appendChild(td);
-        }
-        tbody.appendChild(tr);
-      }
-    }
+	    function filteredExplorerFactorRows(rows) {
+	      const data = Array.isArray(rows) ? rows.slice() : [];
+	      const q = String(byId("explorer_factor_filter_text").value || "").trim().toLowerCase();
+	      const sortKey = String(byId("explorer_factor_sort_key").value || "q_best_asc");
+	      const rowLimitRaw = Number(byId("explorer_factor_limit").value || "20");
+	      const rowLimit = Number.isFinite(rowLimitRaw) ? Math.max(1, Math.floor(rowLimitRaw)) : 20;
+
+	      let filtered = data;
+	      if (q) {
+	        filtered = filtered.filter((row) => {
+	          const keyFactor = String(row && row.key_factor || "").toLowerCase();
+	          return keyFactor.includes(q);
+	        });
+	      }
+
+	      const safeNum = (v, fallback) => {
+	        const n = Number(v);
+	        return Number.isFinite(n) ? n : fallback;
+	      };
+
+	      if (sortKey === "q_median_asc") {
+	        filtered.sort((a, b) =>
+	          safeNum(a && a.q_median, 9.99) - safeNum(b && b.q_median, 9.99) ||
+	          safeNum(b && b.n_runs, 0) - safeNum(a && a.n_runs, 0) ||
+	          String(a && a.key_factor || "").localeCompare(String(b && b.key_factor || ""))
+	        );
+	      } else if (sortKey === "q_median_desc") {
+	        filtered.sort((a, b) =>
+	          safeNum(b && b.q_median, 0) - safeNum(a && a.q_median, 0) ||
+	          safeNum(b && b.n_runs, 0) - safeNum(a && a.n_runs, 0) ||
+	          String(a && a.key_factor || "").localeCompare(String(b && b.key_factor || ""))
+	        );
+	      } else if (sortKey === "n_runs_desc") {
+	        filtered.sort((a, b) =>
+	          safeNum(b && b.n_runs, 0) - safeNum(a && a.n_runs, 0) ||
+	          safeNum(a && a.q_best, 9.99) - safeNum(b && b.q_best, 9.99)
+	        );
+	      } else if (sortKey === "n_runs_asc") {
+	        filtered.sort((a, b) =>
+	          safeNum(a && a.n_runs, 0) - safeNum(b && b.n_runs, 0) ||
+	          safeNum(a && a.q_best, 9.99) - safeNum(b && b.q_best, 9.99)
+	        );
+	      } else if (sortKey === "strong_share_desc") {
+	        filtered.sort((a, b) =>
+	          safeNum(b && b.strong_share_q, 0) - safeNum(a && a.strong_share_q, 0) ||
+	          safeNum(a && a.q_best, 9.99) - safeNum(b && b.q_best, 9.99)
+	        );
+	      } else if (sortKey === "strong_share_asc") {
+	        filtered.sort((a, b) =>
+	          safeNum(a && a.strong_share_q, 0) - safeNum(b && b.strong_share_q, 0) ||
+	          safeNum(a && a.q_best, 9.99) - safeNum(b && b.q_best, 9.99)
+	        );
+	      } else if (sortKey === "validated_share_desc") {
+	        filtered.sort((a, b) =>
+	          safeNum(b && b.validated_share, 0) - safeNum(a && a.validated_share, 0) ||
+	          safeNum(a && a.q_best, 9.99) - safeNum(b && b.q_best, 9.99)
+	        );
+	      } else if (sortKey === "validated_share_asc") {
+	        filtered.sort((a, b) =>
+	          safeNum(a && a.validated_share, 0) - safeNum(b && b.validated_share, 0) ||
+	          safeNum(a && a.q_best, 9.99) - safeNum(b && b.q_best, 9.99)
+	        );
+	      } else if (sortKey === "key_factor_asc") {
+	        filtered.sort((a, b) =>
+	          String(a && a.key_factor || "").localeCompare(String(b && b.key_factor || "")) ||
+	          safeNum(a && a.q_best, 9.99) - safeNum(b && b.q_best, 9.99)
+	        );
+	      } else if (sortKey === "key_factor_desc") {
+	        filtered.sort((a, b) =>
+	          String(b && b.key_factor || "").localeCompare(String(a && a.key_factor || "")) ||
+	          safeNum(a && a.q_best, 9.99) - safeNum(b && b.q_best, 9.99)
+	        );
+	      } else if (sortKey === "q_best_desc") {
+	        filtered.sort((a, b) =>
+	          safeNum(b && b.q_best, 0) - safeNum(a && a.q_best, 0) ||
+	          safeNum(b && b.n_runs, 0) - safeNum(a && a.n_runs, 0) ||
+	          String(a && a.key_factor || "").localeCompare(String(b && b.key_factor || ""))
+	        );
+	      } else {
+	        filtered.sort((a, b) =>
+	          safeNum(a && a.q_best, 9.99) - safeNum(b && b.q_best, 9.99) ||
+	          safeNum(b && b.n_runs, 0) - safeNum(a && a.n_runs, 0) ||
+	          String(a && a.key_factor || "").localeCompare(String(b && b.key_factor || ""))
+	        );
+	      }
+
+	      const limited = filtered.slice(0, rowLimit);
+	      return {
+	        rows: limited,
+	        total: data.length,
+	        filtered: filtered.length,
+	      };
+	    }
+
+	    function rerenderExplorerFactorFromState() {
+	      const payload = UI_STATE.explorerPayload && typeof UI_STATE.explorerPayload === "object"
+	        ? UI_STATE.explorerPayload
+	        : {};
+	      renderExplorerFactorTable(payload.top_key_factors || []);
+	    }
+
+	    function resetExplorerFactorControls() {
+	      byId("explorer_factor_filter_text").value = "";
+	      byId("explorer_factor_sort_key").value = "q_best_asc";
+	      byId("explorer_factor_limit").value = "20";
+	    }
+
+	    function updateExplorerFactorSortHeaders() {
+	      const table = document.getElementById("explorer_factor_table");
+	      if (!table) return;
+	      const sortKey = String(byId("explorer_factor_sort_key").value || "q_best_asc");
+	      const parsed = parseExplorerComboSortKey(sortKey);
+	      const ths = table.querySelectorAll("thead th.sort-click");
+	      ths.forEach((th) => {
+	        th.classList.remove("sort-active");
+	        th.removeAttribute("data-sort-dir");
+	      });
+	      const active = table.querySelector('thead th.sort-click[data-sort-key="' + parsed.col + '"]');
+	      if (active) {
+	        active.classList.add("sort-active");
+	        active.setAttribute("data-sort-dir", parsed.dir);
+	      }
+	    }
+
+	    function bindExplorerFactorSortHeaders() {
+	      const table = document.getElementById("explorer_factor_table");
+	      if (!table) return;
+	      const ths = table.querySelectorAll("thead th.sort-click");
+	      ths.forEach((th) => {
+	        th.addEventListener("click", () => {
+	          const col = String(th.getAttribute("data-sort-key") || "").trim();
+	          if (!col) return;
+	          const current = parseExplorerComboSortKey(byId("explorer_factor_sort_key").value || "q_best_asc");
+	          let dir = defaultExplorerComboSortDir(col);
+	          if (current && current.col === col) {
+	            dir = current.dir === "asc" ? "desc" : "asc";
+	          }
+	          const candidate = col + "_" + dir;
+	          const sel = byId("explorer_factor_sort_key");
+	          const exists = Array.from(sel.options).some((opt) => String(opt.value) === candidate);
+	          sel.value = exists ? candidate : (col + "_" + defaultExplorerComboSortDir(col));
+	          markUxAction("filter_applied");
+	          rerenderExplorerFactorFromState();
+	        });
+	      });
+	      updateExplorerFactorSortHeaders();
+	    }
+
+	    function renderExplorerFactorTable(rows) {
+	      const tbody = byId("explorer_factor_tbody");
+	      tbody.replaceChildren();
+	      updateExplorerFactorSortHeaders();
+	      const out = filteredExplorerFactorRows(rows);
+	      const data = out.rows;
+	      byId("explorer_factor_notice").textContent =
+	        "showing " + String(data.length) + " / " + String(out.filtered) + " factors (from " + String(out.total) + ")";
+	      if (!data.length) {
+	        const tr = document.createElement("tr");
+	        const td = document.createElement("td");
+	        td.colSpan = 7;
+	        td.textContent = "no factor rows";
+	        tr.appendChild(td);
+	        tbody.appendChild(tr);
+	        return;
+	      }
+	      for (let i = 0; i < data.length; i += 1) {
+	        const row = data[i] || {};
+	        const tr = document.createElement("tr");
+	        const cells = [
+	          String(i + 1),
+	          String(row.key_factor || "-"),
+	          fmt(row.n_runs),
+	          fmt(row.q_best, 4),
+	          fmt(row.q_median, 4),
+	          fmt(row.strong_share_q, 3),
+	          fmt(row.validated_share, 3),
+	        ];
+	        for (const cell of cells) {
+	          const td = document.createElement("td");
+	          td.textContent = cell;
+	          tr.appendChild(td);
+	        }
+	        tbody.appendChild(tr);
+	      }
+	    }
 
     function renderExplorerPairTable(rows) {
       const tbody = byId("explorer_pair_tbody");
@@ -6657,13 +6841,26 @@ __MODE_FILTER_OPTIONS__
     byId("explorer_combo_limit").addEventListener("change", () => {
       rerenderExplorerComboFromState();
     });
-    byId("explorer_combo_reset_btn").addEventListener("click", () => {
-      resetExplorerComboControls();
-      rerenderExplorerComboFromState();
-    });
-    byId("explorer_cluster_filter_text").addEventListener("input", () => {
-      rerenderExplorerClusterFromState();
-    });
+	    byId("explorer_combo_reset_btn").addEventListener("click", () => {
+	      resetExplorerComboControls();
+	      rerenderExplorerComboFromState();
+	    });
+	    byId("explorer_factor_filter_text").addEventListener("input", () => {
+	      rerenderExplorerFactorFromState();
+	    });
+	    byId("explorer_factor_sort_key").addEventListener("change", () => {
+	      rerenderExplorerFactorFromState();
+	    });
+	    byId("explorer_factor_limit").addEventListener("change", () => {
+	      rerenderExplorerFactorFromState();
+	    });
+	    byId("explorer_factor_reset_btn").addEventListener("click", () => {
+	      resetExplorerFactorControls();
+	      rerenderExplorerFactorFromState();
+	    });
+	    byId("explorer_cluster_filter_text").addEventListener("input", () => {
+	      rerenderExplorerClusterFromState();
+	    });
     byId("explorer_cluster_min_support").addEventListener("change", () => {
       rerenderExplorerClusterFromState();
     });
@@ -6910,11 +7107,12 @@ __MODE_FILTER_OPTIONS__
     updateModeHelp();
     updateCompareExportButtons();
     applyRunsCompactView();
-    resetUxBench();
-    renderExplorerFocusRunSnapshot(null, "");
-    bindExplorerComboSortHeaders();
+	    resetUxBench();
+	    renderExplorerFocusRunSnapshot(null, "");
+	    bindExplorerComboSortHeaders();
+	    bindExplorerFactorSortHeaders();
 
-    refreshHealth();
+	    refreshHealth();
     loadDatasetConfig().then(() => {
       const hasAny = String(byId("dataset_path").value || "").trim() || String(byId("dataset_run_id").value || "").trim();
       if (!hasAny) {
