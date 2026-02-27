@@ -207,9 +207,24 @@ def parse_args() -> argparse.Namespace:
         choices=("none", "signed_log1p", "signed_log1p_square", "ms_benchmark_lite"),
         default="none",
     )
-    p.add_argument("--expression-max-new-features", type=int, default=0)
-    p.add_argument("--expression-max-base-features", type=int, default=0)
-    p.add_argument("--expression-max-pairs", type=int, default=0)
+    p.add_argument(
+        "--expression-max-new-features",
+        type=int,
+        default=200,
+        help="global cap on derived expression features (0 => no cap; use with care)",
+    )
+    p.add_argument(
+        "--expression-max-base-features",
+        type=int,
+        default=50,
+        help="cap on base features eligible for expression expansion (0 => no cap; use with care)",
+    )
+    p.add_argument(
+        "--expression-max-pairs",
+        type=int,
+        default=500,
+        help="cap on base feature pairs considered for binary ops (0 => no cap; use with care)",
+    )
     p.add_argument("--expression-min-nonmissing-count", type=int, default=20)
     p.add_argument(
         "--categorical-encoding-mode",
@@ -2460,12 +2475,18 @@ def _augment_registry_with_expressions(
     *,
     data: pd.DataFrame,
     registry: List[Dict[str, object]],
+    build_scope_df: pd.DataFrame,
     mode: str,
     max_new_features: int,
     max_base_features: int,
     max_pairs: int,
     min_nonmissing_count: int,
+    min_variation_share: float,
+    min_nonmissing_share: float,
 ) -> tuple[pd.DataFrame, List[Dict[str, object]], Dict[str, object]]:
+    build_df = build_scope_df if isinstance(build_scope_df, pd.DataFrame) else data
+    build_idx = build_df.index
+    mode = str(mode or "").strip().lower()
     ops = _resolve_expression_ops(mode)
     unary_ops = list(ops.get("unary", []))
     binary_ops = list(ops.get("binary", []))
@@ -2480,6 +2501,8 @@ def _augment_registry_with_expressions(
             "expression_max_base_features": int(max_base_features),
             "expression_max_pairs": int(max_pairs),
             "expression_min_nonmissing_count": int(min_nonmissing_count),
+            "expression_min_variation_share": float(min_variation_share),
+            "expression_min_nonmissing_share": float(min_nonmissing_share),
             "n_base_candidates_total": 0,
             "n_base_candidates_used": 0,
             "n_base_candidates_eligible": 0,
@@ -2490,6 +2513,9 @@ def _augment_registry_with_expressions(
             "n_skipped_existing_expression_name": 0,
             "n_skipped_low_nonmissing_base": 0,
             "n_skipped_low_nonmissing_expression": 0,
+            "n_skipped_degenerate_signature": 0,
+            "n_skipped_low_within_event_variation": 0,
+            "n_skipped_low_nonmissing_share": 0,
         }
 
     out_data = data.copy()
@@ -2500,7 +2526,7 @@ def _augment_registry_with_expressions(
         feat = str(row.get("feature_name", "")).strip()
         if not feat or feat in seen_base:
             continue
-        if feat.startswith("expr__"):
+        if feat.startswith(("expr__", "cat__")):
             continue
         if int(row.get("allowed_in_scan", 0)) != 1:
             continue
@@ -2513,48 +2539,114 @@ def _augment_registry_with_expressions(
     skipped_existing = 0
     skipped_low_nonmissing_base = 0
     skipped_low_nonmissing_expression = 0
+    skipped_degenerate_signature = 0
+    skipped_low_variation = 0
+    skipped_low_nonmissing_share = 0
     generated_names: List[str] = []
     cap = int(max_new_features) if int(max_new_features) > 0 else 0
     base_total = len(base_features)
     if int(max_base_features) > 0:
         base_features = base_features[: int(max_base_features)]
 
+    min_count = max(int(min_nonmissing_count), 1)
+    min_var = float(min_variation_share)
+    min_nonmiss = float(min_nonmissing_share)
+
+    def _vector_signature(vec: pd.Series) -> str:
+        arr = pd.to_numeric(vec, errors="coerce").to_numpy(dtype=np.float64, copy=True)
+        arr[~np.isfinite(arr)] = np.nan
+        nan_mask = np.isnan(arr)
+        arr2 = arr.copy()
+        arr2[nan_mask] = 0.0
+        h = hashlib.sha256()
+        h.update(nan_mask.tobytes())
+        h.update(arr2.tobytes())
+        return h.hexdigest()
+
+    def _default_transform_for(vec_build: pd.Series) -> str:
+        numeric = pd.to_numeric(vec_build, errors="coerce")
+        uniq = int(numeric.dropna().nunique())
+        return "none" if uniq <= 2 else "zscore_within_track"
+
     base_vectors: Dict[str, pd.Series] = {}
+    base_vectors_build: Dict[str, pd.Series] = {}
+    seen_signatures: set[str] = set()
     eligible_bases: List[str] = []
     for feat in base_features:
-        base_vec = pd.to_numeric(out_data[feat], errors="coerce")
+        base_vec = pd.to_numeric(out_data[feat], errors="coerce").replace([np.inf, -np.inf], np.nan)
+        base_vec_build = pd.to_numeric(out_data.loc[build_idx, feat], errors="coerce").replace(
+            [np.inf, -np.inf], np.nan
+        )
         base_vectors[feat] = base_vec
-        if int(base_vec.notna().sum()) < int(min_nonmissing_count):
+        base_vectors_build[feat] = base_vec_build
+        if int(base_vec_build.notna().sum()) < int(min_count):
             skipped_low_nonmissing_base += 1
             continue
+        if int(base_vec_build.dropna().nunique()) <= 1:
+            skipped_low_nonmissing_base += 1
+            continue
+        seen_signatures.add(_vector_signature(base_vec_build))
         eligible_bases.append(feat)
 
-    def _append_expression(
-        *,
-        expr_name: str,
-        expr_vec: pd.Series,
-        op: str,
-        formula: str,
-        lhs: str,
-        rhs: str | None = None,
-    ) -> None:
-        nonlocal skipped_existing, skipped_low_nonmissing_expression
+        def _append_expression(
+            *,
+            expr_name: str,
+            expr_vec: pd.Series,
+            op: str,
+            formula: str,
+            lhs: str,
+            rhs: str | None = None,
+        ) -> None:
+            nonlocal skipped_existing
+            nonlocal skipped_low_nonmissing_expression
+            nonlocal skipped_degenerate_signature
+            nonlocal skipped_low_variation
+            nonlocal skipped_low_nonmissing_share
         if expr_name in out_data.columns:
             skipped_existing += 1
             return
         expr_num = pd.to_numeric(expr_vec, errors="coerce").replace([np.inf, -np.inf], np.nan)
-        if int(expr_num.notna().sum()) < int(min_nonmissing_count):
+        expr_num_build = pd.to_numeric(expr_num.reindex(build_idx), errors="coerce").replace(
+            [np.inf, -np.inf], np.nan
+        )
+        if int(expr_num_build.notna().sum()) < int(min_count):
             skipped_low_nonmissing_expression += 1
             return
-        if int(expr_num.dropna().nunique()) <= 1:
+        if int(expr_num_build.dropna().nunique()) <= 1:
             skipped_low_nonmissing_expression += 1
             return
+        signature = _vector_signature(expr_num_build)
+        if signature in seen_signatures:
+            skipped_degenerate_signature += 1
+            return
+
+        metric_df = build_df[["event_id"]].copy()
+        metric_df[expr_name] = expr_num_build.astype(float)
+        share_var, share_nonmiss, n_var_events, n_two_alt = within_event_variation_metrics(
+            metric_df, feature_col=expr_name
+        )
+        if float(share_var) < float(min_var):
+            skipped_low_variation += 1
+            return
+        if float(share_nonmiss) < float(min_nonmiss):
+            skipped_low_nonmissing_share += 1
+            return
+
         out_data[expr_name] = expr_num.astype(float)
+        seen_signatures.add(signature)
         row: Dict[str, object] = {
             "feature_name": expr_name,
             "data_source": "derived_expression",
             "timing_label": "pre_treatment",
+            "role": "key_factor_candidate",
             "allowed_in_scan": 1,
+            "within_event_variation_expected": within_event_variation_label(float(share_var)),
+            "share_events_with_variation": round(float(share_var), 6),
+            "share_events_nonmissing": round(float(share_nonmiss), 6),
+            "n_events_with_variation": int(n_var_events),
+            "n_two_alt_events": int(n_two_alt),
+            "transform": _default_transform_for(expr_num_build),
+            "missing_policy": "drop",
             "block_reasons": [],
             "expression_op": op,
             "expression_input_feature": lhs,
@@ -2649,6 +2741,8 @@ def _augment_registry_with_expressions(
         "expression_max_base_features": int(max_base_features),
         "expression_max_pairs": int(max_pairs),
         "expression_min_nonmissing_count": int(min_nonmissing_count),
+        "expression_min_variation_share": float(min_var),
+        "expression_min_nonmissing_share": float(min_nonmiss),
         "n_base_candidates_total": base_total,
         "n_base_candidates_used": len(base_features),
         "n_base_candidates_eligible": len(eligible_bases),
@@ -2659,6 +2753,9 @@ def _augment_registry_with_expressions(
         "n_skipped_existing_expression_name": int(skipped_existing),
         "n_skipped_low_nonmissing_base": int(skipped_low_nonmissing_base),
         "n_skipped_low_nonmissing_expression": int(skipped_low_nonmissing_expression),
+        "n_skipped_degenerate_signature": int(skipped_degenerate_signature),
+        "n_skipped_low_within_event_variation": int(skipped_low_variation),
+        "n_skipped_low_nonmissing_share": int(skipped_low_nonmissing_share),
         "generated_feature_names": generated_names[:50],
     }
     return out_data, out_registry, meta
@@ -3372,11 +3469,14 @@ def main() -> int:
     data, registry, expression_meta = _augment_registry_with_expressions(
         data=data,
         registry=registry,
+        build_scope_df=registry_build_df,
         mode=str(args.expression_registry_mode),
         max_new_features=int(args.expression_max_new_features),
         max_base_features=int(args.expression_max_base_features),
         max_pairs=int(args.expression_max_pairs),
         min_nonmissing_count=int(args.expression_min_nonmissing_count),
+        min_variation_share=float(args.registry_min_variation_share),
+        min_nonmissing_share=float(args.registry_min_nonmissing_share),
     )
     data, registry, categorical_meta = _augment_registry_with_categorical(
         data=data,
