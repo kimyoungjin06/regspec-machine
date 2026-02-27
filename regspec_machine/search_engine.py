@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from dataclasses import dataclass, field
 from math import inf
 from time import perf_counter
@@ -31,6 +32,7 @@ class ScanConfig:
     complexity_penalty: float = 0.01
     include_base_controls: bool = True
     base_controls: Tuple[str, ...] = ("pub_year_alt", "recency_years_alt")
+    fixed_regressors: Tuple[str, ...] = ()
     control_spec_mode: str = "both"
     contexts: Tuple[Tuple[str, str], ...] = (
         ("all_contexts", "y_all"),
@@ -72,6 +74,28 @@ def _equivalence_hash(
     normalized_exog = sorted({str(c).strip() for c in exog_cols if str(c).strip()})
     token = f"{track}|{context_scope}|{y_col}|{','.join(normalized_exog)}"
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def _sanitize_spec_token(value: str) -> str:
+    text = str(value or "").strip().lower()
+    text = re.sub(r"[^a-z0-9]+", "_", text)
+    text = re.sub(r"_+", "_", text).strip("_")
+    return text or "unnamed"
+
+
+def _anchor_spec_token(fixed_regressors: Sequence[str]) -> str:
+    cleaned = [str(c).strip() for c in fixed_regressors if str(c).strip()]
+    if not cleaned:
+        return ""
+    normalized = sorted(set(cleaned))
+    token = ",".join(normalized)
+    hx = hashlib.sha256(token.encode("utf-8")).hexdigest()[:8]
+    if len(normalized) == 1:
+        name = _sanitize_spec_token(normalized[0])
+        if len(name) > 24:
+            name = name[:24]
+        return f"anchored_{name}_h{hx}"
+    return f"anchored_n{len(normalized)}_h{hx}"
 
 
 def _count_two_alt_events(df: pd.DataFrame) -> int:
@@ -719,6 +743,14 @@ def run_key_factor_scan(
     if config.include_base_controls:
         base_controls = [c for c in config.base_controls if c in df.columns]
     base_control_spec_enabled = bool(config.include_base_controls and len(base_controls) > 0)
+    fixed_regressors = [
+        str(c).strip() for c in getattr(config, "fixed_regressors", ()) if str(c).strip()
+    ]
+    fixed_regressors = list(dict.fromkeys(fixed_regressors))  # stable-dedupe
+    missing_fixed = [c for c in fixed_regressors if c not in df.columns]
+    if missing_fixed:
+        raise ValueError(f"fixed_regressors missing in data: {missing_fixed}")
+    anchor_token = _anchor_spec_token(fixed_regressors)
     spec_mode = str(getattr(config, "control_spec_mode", "both") or "both").strip().lower()
     if spec_mode not in {"both", "key_only", "key_plus_base_controls"}:
         raise ValueError(f"unsupported control_spec_mode: {spec_mode}")
@@ -729,7 +761,8 @@ def run_key_factor_scan(
         )
     base_controls_min_events_per_exog = max(int(config.base_controls_min_events_per_exog), 1)
     base_controls_min_policy_docs_per_exog = max(int(config.base_controls_min_policy_docs_per_exog), 1)
-    n_exog_plus_base = int(1 + len(base_controls)) if base_control_spec_enabled else 0
+    n_fixed = int(len(fixed_regressors))
+    n_exog_plus_base = int(1 + n_fixed + len(base_controls)) if base_control_spec_enabled else 0
     min_events_for_plus_base = (
         max(
             int(config.min_informative_events_estimable),
@@ -889,10 +922,19 @@ def run_key_factor_scan(
                 if allow_plus_base:
                     context_control_specs.append(("clogit_key_plus_base_controls", base_controls))
             for spec_id, controls in context_control_specs:
-                fdr_family_id = f"{track}|{context_scope}|{y_col}|{spec_id}"
+                spec_id_effective = spec_id
+                if anchor_token:
+                    spec_id_effective = f"{spec_id}__{anchor_token}"
+                fdr_family_id = f"{track}|{context_scope}|{y_col}|{spec_id_effective}"
                 for feature in allowed_features:
-                    exog_cols = [feature, *[c for c in controls if c != feature]]
-                    candidate_id = f"{track}|{context_scope}|{y_col}|{spec_id}|{feature}"
+                    exog_cols: List[str] = [feature]
+                    for fixed_col in fixed_regressors:
+                        if fixed_col and fixed_col not in exog_cols:
+                            exog_cols.append(fixed_col)
+                    for c in controls:
+                        if c and c not in exog_cols:
+                            exog_cols.append(c)
+                    candidate_id = f"{track}|{context_scope}|{y_col}|{spec_id_effective}|{feature}"
                     equivalence_hash = _equivalence_hash(
                         track=track,
                         context_scope=context_scope,
@@ -908,7 +950,7 @@ def run_key_factor_scan(
                                 "track": track,
                                 "context_scope": context_scope,
                                 "y_col": y_col,
-                                "spec_id": spec_id,
+                                "spec_id": spec_id_effective,
                                 "key_factor": feature,
                             }
                         )
@@ -919,7 +961,7 @@ def run_key_factor_scan(
                             "track": track,
                             "context_scope": context_scope,
                             "y_col": y_col,
-                            "spec_id": spec_id,
+                            "spec_id": spec_id_effective,
                             "feature": feature,
                             "exog_cols": exog_cols,
                             "fdr_family_id": fdr_family_id,

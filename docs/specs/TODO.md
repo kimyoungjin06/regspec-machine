@@ -27,7 +27,7 @@ This backlog is ordered by governance impact and baseline value.
   - Guardrails: if fixed controls are not estimable under the estimator (no within-event variation), surface a clear error or skip reason.
 - Notes:
   - Fixed base-controls are supported (`--base-controls`, `--base-controls-strict`) and are included in `config_hash` via `controls_meta`.
-  - Anchor-factor-as-mandatory-regressor (scan incremental additions given fixed anchor) is still a candidate future upgrade.
+  - Anchor-factor-as-mandatory-regressor is supported via `--fixed-regressors` (anchored scan). Preset/UI shortcuts can be added later.
 
 ### T2. Explorer Sweep UX Compression (High ROI)
 - Goal: reduce scroll, reduce whitespace, make discovery -> inspect loop faster.

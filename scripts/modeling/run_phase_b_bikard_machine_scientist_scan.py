@@ -196,6 +196,14 @@ def parse_args() -> argparse.Namespace:
         default=False,
         help="fail fast if any requested base control column is missing",
     )
+    p.add_argument(
+        "--fixed-regressors",
+        default="",
+        help=(
+            "comma-separated regressors that are always included in every spec "
+            "(anchored scan; missing columns raise)"
+        ),
+    )
     p.add_argument("--n-restarts", type=int, default=1)
     p.add_argument("--restart-seed-step", type=int, default=1_000_003)
     # Legacy alias: when set, it fans out to both registry/scan caps.
@@ -3521,6 +3529,21 @@ def main() -> int:
             f"include_base_controls_effective={include_base_controls_effective}; "
             f"missing={controls_meta.get('missing_base_controls')}"
         )
+    fixed_regressors_raw = str(args.fixed_regressors or "").strip()
+    fixed_regressors_requested = (
+        [c.strip() for c in fixed_regressors_raw.split(",") if c.strip()] if fixed_regressors_raw else []
+    )
+    fixed_regressors_requested = list(dict.fromkeys(fixed_regressors_requested))  # stable-dedupe
+    missing_fixed_regressors = [c for c in fixed_regressors_requested if c not in data.columns]
+    if missing_fixed_regressors:
+        raise ValueError(f"missing fixed regressors: {missing_fixed_regressors}")
+    fixed_regressors_used = list(fixed_regressors_requested)
+    fixed_regressors_meta = {
+        "fixed_regressors_raw": fixed_regressors_raw,
+        "fixed_regressors_requested": fixed_regressors_requested,
+        "fixed_regressors_used": fixed_regressors_used,
+        "missing_fixed_regressors": missing_fixed_regressors,
+    }
     candidate_pool_meta = _estimate_candidate_pool_size(
         data=data,
         registry=registry,
@@ -3650,6 +3673,7 @@ def main() -> int:
         "include_base_controls_effective": include_base_controls_effective,
         "control_spec_mode": control_spec_mode,
         "controls_meta": controls_meta,
+        "fixed_regressors_meta": fixed_regressors_meta,
         "candidate_pool_meta": candidate_pool_meta,
         "y_contexts_json": str(args.y_contexts_json),
         "y_contexts_merge_mode": str(args.y_contexts_merge_mode),
@@ -3780,6 +3804,7 @@ def main() -> int:
             complexity_penalty=complexity_penalty_effective,
             include_base_controls=include_base_controls_effective,
             base_controls=tuple(base_controls_used),
+            fixed_regressors=tuple(fixed_regressors_used),
             control_spec_mode=control_spec_mode,
             contexts=tuple(y_contexts),
             validated_min_informative_events_by_y=dict(y_validated_events_by_col),
@@ -4263,6 +4288,7 @@ def main() -> int:
                     complexity_penalty=complexity_penalty_effective,
                     include_base_controls=include_base_controls_effective,
                     base_controls=tuple(base_controls_used),
+                    fixed_regressors=tuple(fixed_regressors_used),
                     control_spec_mode=control_spec_mode,
                     contexts=tuple(y_contexts),
                     validated_min_informative_events_by_y=dict(y_validated_events_by_col),
@@ -4539,6 +4565,7 @@ def main() -> int:
                     complexity_penalty=complexity_penalty_effective,
                     include_base_controls=include_base_controls_effective,
                     base_controls=tuple(base_controls_used),
+                    fixed_regressors=tuple(fixed_regressors_used),
                     control_spec_mode=control_spec_mode,
                     contexts=tuple(y_contexts),
                     validated_min_informative_events_by_y=dict(y_validated_events_by_col),
