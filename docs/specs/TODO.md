@@ -60,6 +60,10 @@ This backlog is ordered by governance impact and baseline value.
 - Acceptance:
   - category-level features are hash-stable and included in registry hash.
   - explicit caps: max levels, min counts, max new features.
+- Status: Done (2026-02-27).
+- Implemented: runner flags `--categorical-encoding-mode onehot` + caps (`--categorical-max-levels-per-feature`, `--categorical-min-level-count`, `--categorical-max-new-features`).
+- Implemented: stable token format `cat__<source_feature>__<sanitized>_h<hash8>`.
+- Implemented: derived onehot features apply within-event variation / nonmissing share gates (build-scope aligned with discovery-only registry build).
 
 ### T6. Derived Feature Grammar (MS Benchmark Lite)
 - Goal: expand a small grammar safely (signed log, squares, pairwise) with hard budgets.
