@@ -119,6 +119,18 @@ case "$MODE" in
     ;;
   contract-ci)
     run_cmd "\"$PY\" \"$CONTRACT_CI_SCRIPT\" --tag ${TAG}"
+    # Baseline smoke (fast) to enforce "nooption + singlex" lock during contract checks.
+    # Only runs when core Phase-B inputs exist (monorepo environment); standalone repo skips.
+    DYAD_BASE_DEFAULT="$ROOT/outputs/tables/phase_b_bikard_policy_doc_twin_dyad_base_20260219.csv"
+    EXT_FEATURE_DEFAULT="$ROOT/data/metadata/metadata_extension_feature_table_overton20260130.csv"
+    PA_COV_DEFAULT="$ROOT/data/processed/phase_a_model_input_strict_pairs_api_backfilled_overton20260130_labeled.csv"
+    SPLIT_DEFAULT="$ROOT/outputs/tables/phase_b_keyfactor_explorer_policy_split_20260219.csv"
+    if [[ -f "$DYAD_BASE_DEFAULT" && -f "$EXT_FEATURE_DEFAULT" && -f "$PA_COV_DEFAULT" && -f "$SPLIT_DEFAULT" ]]; then
+      SMOKE_RUN_ID="module03_contract_ci_smoke_${TAG}"
+      run_cmd "\"$PY\" \"$PRESET_SCRIPT\" --mode paired_nooption_singlex --run-id ${SMOKE_RUN_ID} --runner-python \"$PY\" --scan-n-bootstrap 9 --cli-summary-top-n 3 --extra-arg=--n-restarts=1 --extra-arg=--scan-max-features=20"
+    else
+      echo "[SKIP] contract-ci baseline smoke: missing core inputs (expected monorepo Phase-B artifacts)." >&2
+    fi
     ;;
   dump-internal)
     run_cmd "TAG=${TAG} SCOPE=internal \"$DUMP_SCRIPT\""
