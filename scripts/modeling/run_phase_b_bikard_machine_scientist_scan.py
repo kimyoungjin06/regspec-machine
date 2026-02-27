@@ -2588,20 +2588,21 @@ def _augment_registry_with_expressions(
         seen_signatures.add(_vector_signature(base_vec_build))
         eligible_bases.append(feat)
 
-        def _append_expression(
-            *,
-            expr_name: str,
-            expr_vec: pd.Series,
-            op: str,
-            formula: str,
-            lhs: str,
-            rhs: str | None = None,
-        ) -> None:
-            nonlocal skipped_existing
-            nonlocal skipped_low_nonmissing_expression
-            nonlocal skipped_degenerate_signature
-            nonlocal skipped_low_variation
-            nonlocal skipped_low_nonmissing_share
+    def _append_expression(
+        *,
+        expr_name: str,
+        expr_vec: pd.Series,
+        op: str,
+        formula: str,
+        lhs: str,
+        rhs: str | None = None,
+    ) -> None:
+        nonlocal skipped_existing
+        nonlocal skipped_low_nonmissing_expression
+        nonlocal skipped_degenerate_signature
+        nonlocal skipped_low_variation
+        nonlocal skipped_low_nonmissing_share
+
         if expr_name in out_data.columns:
             skipped_existing += 1
             return
