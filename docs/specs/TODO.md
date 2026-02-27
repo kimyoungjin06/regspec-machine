@@ -32,6 +32,9 @@ This backlog is ordered by governance impact and baseline value.
   - Layout: a stable "square-ish" scatter area with aligned x/y distributions.
 - Acceptance:
   - "Find best run -> open Run Details" can be done in <= 6 clicks from cold start (measured by the UX journey benchmark).
+- Status: Done (2026-02-27).
+- Implemented: compact Explorer joint layout + non-blocking hover + deep-dive folding + table header click-to-sort + sticky toolbar.
+- Reference commits: `0540f5f`, `f76375c`, `2d784a2`.
 
 ### T3. FDR Help for Regression Users
 - Goal: make q-values understandable to users who know regression but not FDR.
@@ -40,6 +43,9 @@ This backlog is ordered by governance impact and baseline value.
   - Default labeling: "q (FDR-adjusted)" and "p (raw)".
 - Acceptance:
   - No ambiguity in UI about which gate is primary.
+- Status: Done (2026-02-27).
+- Implemented: UI help fold + relabeled q/p across Explorer + validation gates.
+- Reference commits: `f76375c`.
 
 ## P1 (Should-Have)
 
