@@ -27,6 +27,10 @@
 - 후보 피처 레지스트리(또는 자동 생성)
 - split 파일(탐색/검증 분리 규칙)
 
+레지스트리(Registry)에서 자주 보는 필드:
+- `allowed_in_scan`: 1이면 스캔 후보로 사용됨
+- `suggested_as_control`: 1이면 "통제로 쓰기 좋은 컬럼" 신호(그래도 스캔 후보로 포함될 수 있음)
+
 출력(핵심):
 - `scan_runs_*.csv`: 각 후보의 split별 실행 결과
 - `top_models_*.csv`: 후보 단위 요약 결과
@@ -85,6 +89,9 @@
 
 권장 시작점은 `paired_nooption_singlex`입니다.
 
+추가로, "가설 변수(앵커)를 항상 식에 넣어두고" 나머지 후보를 돌리고 싶으면:
+- runner 옵션 `--fixed-regressors`로 앵커 컬럼을 고정할 수 있습니다(anchored scan).
+
 ## 8) 가장 쉬운 실행 예시
 프로젝트 루트(이 모듈 디렉토리)에서:
 
@@ -103,6 +110,14 @@ validation 게이트를 레거시 단일 게이트로 맞춰 비교하고 싶으
   --run-id phase_b_bikard_keyfactor_scan_pair_legacysync_example_20260223 \
   --scan-n-bootstrap 49 \
   --paired-legacy-sync-validation
+```
+
+앵커를 고정해서(예: `is_academia_origin`) 나머지 후보를 스캔하려면:
+
+```bash
+.venv/bin/python scripts/modeling/run_phase_b_bikard_machine_scientist_scan.py \
+  --run-id anchored_demo_20260227 \
+  --fixed-regressors is_academia_origin
 ```
 
 ## 9) 결과 해석 순서 (초보자용)
