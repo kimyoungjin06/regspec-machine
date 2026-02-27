@@ -18,6 +18,7 @@ This backlog is ordered by governance impact and baseline value.
 - Proposed interface:
   - `--control-spec-mode` (example: `both|key_only|key_plus_base_controls`)
   - optional: `--base-controls` override (comma-separated), with "present-only" resolution + audit meta
+  - optional: `--base-controls-strict` (fail fast if any requested base control is missing)
 - Acceptance:
   - Config hash changes when fixed controls change.
   - UI and run summary show "controls used" clearly.
@@ -67,4 +68,3 @@ This backlog is ordered by governance impact and baseline value.
 - Constraints:
   - Must preserve run immutability; streaming is append-only.
   - Must not leak validation signals into search.
-

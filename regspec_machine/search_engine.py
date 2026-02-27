@@ -31,6 +31,7 @@ class ScanConfig:
     complexity_penalty: float = 0.01
     include_base_controls: bool = True
     base_controls: Tuple[str, ...] = ("pub_year_alt", "recency_years_alt")
+    control_spec_mode: str = "both"
     contexts: Tuple[Tuple[str, str], ...] = (
         ("all_contexts", "y_all"),
         ("evidence_use_only", "y_evidence"),
@@ -718,6 +719,14 @@ def run_key_factor_scan(
     if config.include_base_controls:
         base_controls = [c for c in config.base_controls if c in df.columns]
     base_control_spec_enabled = bool(config.include_base_controls and len(base_controls) > 0)
+    spec_mode = str(getattr(config, "control_spec_mode", "both") or "both").strip().lower()
+    if spec_mode not in {"both", "key_only", "key_plus_base_controls"}:
+        raise ValueError(f"unsupported control_spec_mode: {spec_mode}")
+    if spec_mode == "key_plus_base_controls" and not base_control_spec_enabled:
+        raise ValueError(
+            "control_spec_mode=key_plus_base_controls requires include_base_controls=true and "
+            "at least one base control column present in data"
+        )
     base_controls_min_events_per_exog = max(int(config.base_controls_min_events_per_exog), 1)
     base_controls_min_policy_docs_per_exog = max(int(config.base_controls_min_policy_docs_per_exog), 1)
     n_exog_plus_base = int(1 + len(base_controls)) if base_control_spec_enabled else 0
@@ -844,8 +853,10 @@ def run_key_factor_scan(
                         }
                     )
                     continue
-            context_control_specs: List[Tuple[str, List[str]]] = [("clogit_key_only", [])]
-            if base_control_spec_enabled:
+            context_control_specs: List[Tuple[str, List[str]]] = []
+            if spec_mode in {"both", "key_only"}:
+                context_control_specs.append(("clogit_key_only", []))
+            if spec_mode in {"both", "key_plus_base_controls"} and base_control_spec_enabled:
                 allow_plus_base = True
                 cap = discovery_capacity_by_track_y.get((track, y_col))
                 if cap is None:
@@ -856,7 +867,7 @@ def run_key_factor_scan(
                     discovery_capacity_by_track_y[(track, y_col)] = cap
                 cap_events = int(cap.get("n_informative_events", 0))
                 cap_docs = int(cap.get("n_policy_docs_informative", 0))
-                if config.auto_disable_base_controls_low_capacity:
+                if config.auto_disable_base_controls_low_capacity and spec_mode != "key_plus_base_controls":
                     allow_plus_base = (
                         cap_events >= int(min_events_for_plus_base)
                         and cap_docs >= int(min_docs_for_plus_base)

@@ -172,6 +172,23 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--complexity-penalty-auto-max", type=float, default=0.05)
     p.add_argument("--include-base-controls", action="store_true", default=True)
     p.add_argument("--no-base-controls", dest="include_base_controls", action="store_false")
+    p.add_argument(
+        "--control-spec-mode",
+        choices=("both", "key_only", "key_plus_base_controls"),
+        default="both",
+        help="which control spec families to scan (default: both)",
+    )
+    p.add_argument(
+        "--base-controls",
+        default="",
+        help="comma-separated override of base controls (default uses built-in list)",
+    )
+    p.add_argument(
+        "--base-controls-strict",
+        action="store_true",
+        default=False,
+        help="fail fast if any requested base control column is missing",
+    )
     p.add_argument("--n-restarts", type=int, default=1)
     p.add_argument("--restart-seed-step", type=int, default=1_000_003)
     # Legacy alias: when set, it fans out to both registry/scan caps.
@@ -484,19 +501,41 @@ def _resolve_stage_gate_thresholds(
 
 
 def _resolve_base_controls(
-    data: pd.DataFrame, include_base_controls: bool
+    data: pd.DataFrame,
+    include_base_controls: bool,
+    *,
+    base_controls_override: str,
+    strict: bool,
 ) -> tuple[List[str], Dict[str, object]]:
-    requested = ["pub_year_alt", "recency_years_alt", "pa__log1p_author_count"]
+    default_requested = ["pub_year_alt", "recency_years_alt", "pa__log1p_author_count"]
+    override_raw = str(base_controls_override or "").strip()
+    if override_raw:
+        requested = [c.strip() for c in override_raw.split(",")]
+        requested = [c for c in requested if c]
+        requested_source = "override"
+    else:
+        requested = list(default_requested)
+        requested_source = "default"
+
+    requested = list(dict.fromkeys(requested))  # stable-dedupe
     if not include_base_controls:
         return [], {
             "base_controls_requested": requested,
+            "base_controls_requested_source": requested_source,
+            "base_controls_override_raw": override_raw,
+            "base_controls_strict": bool(strict),
             "base_controls_used": [],
             "missing_base_controls": requested,
         }
     used = [c for c in requested if c in data.columns]
     missing = [c for c in requested if c not in used]
+    if strict and missing:
+        raise ValueError(f"missing base control columns (strict): {missing}")
     return used, {
         "base_controls_requested": requested,
+        "base_controls_requested_source": requested_source,
+        "base_controls_override_raw": override_raw,
+        "base_controls_strict": bool(strict),
         "base_controls_used": used,
         "missing_base_controls": missing,
     }
@@ -3283,11 +3322,21 @@ def main() -> int:
         family_dedupe_meta.get("n_dropped_family_duplicates", 0)
     )
     base_controls_used, controls_meta = _resolve_base_controls(
-        data, include_base_controls=bool(args.include_base_controls)
+        data,
+        include_base_controls=bool(args.include_base_controls),
+        base_controls_override=str(args.base_controls),
+        strict=bool(args.base_controls_strict),
     )
     include_base_controls_effective = bool(args.include_base_controls and len(base_controls_used) > 0)
     controls_meta["include_base_controls_requested"] = bool(args.include_base_controls)
     controls_meta["include_base_controls_effective"] = include_base_controls_effective
+    control_spec_mode = str(args.control_spec_mode or "both").strip().lower()
+    if control_spec_mode == "key_plus_base_controls" and not include_base_controls_effective:
+        raise ValueError(
+            "control-spec-mode=key_plus_base_controls requires base controls, but "
+            f"include_base_controls_effective={include_base_controls_effective}; "
+            f"missing={controls_meta.get('missing_base_controls')}"
+        )
     candidate_pool_meta = _estimate_candidate_pool_size(
         data=data,
         registry=registry,
@@ -3415,6 +3464,7 @@ def main() -> int:
         "complexity_penalty_meta": complexity_penalty_meta,
         "include_base_controls_requested": bool(args.include_base_controls),
         "include_base_controls_effective": include_base_controls_effective,
+        "control_spec_mode": control_spec_mode,
         "controls_meta": controls_meta,
         "candidate_pool_meta": candidate_pool_meta,
         "y_contexts_json": str(args.y_contexts_json),
@@ -3546,6 +3596,7 @@ def main() -> int:
             complexity_penalty=complexity_penalty_effective,
             include_base_controls=include_base_controls_effective,
             base_controls=tuple(base_controls_used),
+            control_spec_mode=control_spec_mode,
             contexts=tuple(y_contexts),
             validated_min_informative_events_by_y=dict(y_validated_events_by_col),
             validated_min_policy_docs_by_y=dict(y_validated_docs_by_col),
@@ -4028,6 +4079,7 @@ def main() -> int:
                     complexity_penalty=complexity_penalty_effective,
                     include_base_controls=include_base_controls_effective,
                     base_controls=tuple(base_controls_used),
+                    control_spec_mode=control_spec_mode,
                     contexts=tuple(y_contexts),
                     validated_min_informative_events_by_y=dict(y_validated_events_by_col),
                     validated_min_policy_docs_by_y=dict(y_validated_docs_by_col),
@@ -4303,6 +4355,7 @@ def main() -> int:
                     complexity_penalty=complexity_penalty_effective,
                     include_base_controls=include_base_controls_effective,
                     base_controls=tuple(base_controls_used),
+                    control_spec_mode=control_spec_mode,
                     contexts=tuple(y_contexts),
                     validated_min_informative_events_by_y=dict(y_validated_events_by_col),
                     validated_min_policy_docs_by_y=dict(y_validated_docs_by_col),

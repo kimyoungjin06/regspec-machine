@@ -848,6 +848,23 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--scan-n-bootstrap", type=int, default=0)
     p.add_argument("--scan-max-features", type=int, default=0)
     p.add_argument("--refine-n-bootstrap", type=int, default=0)
+    p.add_argument(
+        "--control-spec-mode",
+        choices=("both", "key_only", "key_plus_base_controls"),
+        default="both",
+        help="forwarded to runner for nooption modes (singlex modes ignore this)",
+    )
+    p.add_argument(
+        "--base-controls",
+        default="",
+        help="comma-separated override of base controls (forwarded to runner for nooption modes)",
+    )
+    p.add_argument(
+        "--base-controls-strict",
+        action="store_true",
+        default=False,
+        help="fail fast if any requested base control column is missing (nooption modes only)",
+    )
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--runner-python", default=".venv/bin/python")
     p.add_argument("--cli-summary-top-n", type=int, default=10)
@@ -1416,6 +1433,12 @@ def main() -> int:
             singlex_run_id,
             *common_tail,
         ]
+        cmd_nooption.extend(["--control-spec-mode", str(args.control_spec_mode)])
+        base_controls_override = str(args.base_controls or "").strip()
+        if base_controls_override:
+            cmd_nooption.extend(["--base-controls", base_controls_override])
+        if bool(args.base_controls_strict):
+            cmd_nooption.append("--base-controls-strict")
         if args.dry_run:
             print("[dry-run] paired mode commands:")
             print(f"  [{nooption_child_mode}] " + " ".join(cmd_nooption))
@@ -1582,6 +1605,14 @@ def main() -> int:
     resolved_scan_inputs = _resolve_scan_input_overrides()
     for flag, path_text, _source in resolved_scan_inputs:
         cmd.extend([str(flag), str(path_text)])
+
+    if not str(mode).startswith("singlex"):
+        cmd.extend(["--control-spec-mode", str(args.control_spec_mode)])
+        base_controls_override = str(args.base_controls or "").strip()
+        if base_controls_override:
+            cmd.extend(["--base-controls", base_controls_override])
+        if bool(args.base_controls_strict):
+            cmd.append("--base-controls-strict")
 
     if mode in {"openexplore", "openexplore_autorefine"}:
         scan_boot = int(args.scan_n_bootstrap) if int(args.scan_n_bootstrap) > 0 else 49
