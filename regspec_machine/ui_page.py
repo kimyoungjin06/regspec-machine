@@ -1328,7 +1328,7 @@ __MODE_FILTER_OPTIONS__
         </select>
         <label for="explorer_run_like" style="margin:0; align-self:center;">run_id contains</label>
         <input id="explorer_run_like" style="width:220px;" placeholder="optional keyword filter" />
-        <label for="explorer_q_threshold" style="margin:0; align-self:center;">strong q <=</label>
+        <label for="explorer_q_threshold" style="margin:0; align-self:center;">strong q (FDR) <=</label>
         <input id="explorer_q_threshold" type="number" min="0" max="1" step="0.01" value="0.10" style="width:90px;" />
         <label for="explorer_top_n" style="margin:0; align-self:center;">top_n</label>
         <select id="explorer_top_n" style="width:auto; min-width:80px;">
@@ -1339,6 +1339,21 @@ __MODE_FILTER_OPTIONS__
         </select>
       </div>
       <div id="explorer_notice" class="notice">ready</div>
+      <details class="viz-card fold-card" id="explorer_fdr_help">
+        <summary>Why q (FDR) instead of p?</summary>
+        <div class="fold-body">
+          <div class="hint-box" style="margin-top:0;">
+            This tool scans many candidate specifications. If you use `p<=0.05` across many tests, false positives become likely.
+            `q` is the FDR-adjusted value (Benjamini-Hochberg): it controls the expected false-discovery proportion among the candidates you call "significant".
+            <br><br>
+            Practical rule here:
+            <br>
+            - use `q (FDR)` as the primary gate (default `q<=0.10`)
+            <br>
+            - keep `p (raw)` visible as supporting evidence (default `p<=0.05`)
+          </div>
+        </div>
+      </details>
       <details class="viz-card fold-card" id="explorer_ux_benchmark">
         <summary>UX Journey Benchmark (optional)</summary>
         <div class="fold-body">
@@ -1362,11 +1377,11 @@ __MODE_FILTER_OPTIONS__
           <div class="kpi-grid" id="explorer_kpi_cards"></div>
         </div>
         <div class="viz-card explorer-joint-top">
-          <h3>Best q Distribution (x-axis)</h3>
+          <h3>Best q (FDR) Distribution (x-axis)</h3>
           <div id="explorer_best_q_marginal" class="marginal-wrap"></div>
         </div>
         <div class="viz-card explorer-joint-main">
-          <h3>Best q vs Best p Scatter (run-level)</h3>
+          <h3>Best q (FDR) vs Best p (raw) Scatter (run-level)</h3>
           <div id="explorer_best_qp_scatter" class="scatter-wrap"></div>
           <div id="explorer_best_qp_meta" class="footer-note">points: 0</div>
           <div id="explorer_best_qp_hover" class="hint-box">hover/click a point to inspect run-level metrics</div>
@@ -1379,7 +1394,7 @@ __MODE_FILTER_OPTIONS__
           </div>
         </div>
         <div class="viz-card explorer-joint-side">
-          <h3>Best p Distribution (y-axis)</h3>
+          <h3>Best p (raw) Distribution (y-axis)</h3>
           <div id="explorer_best_p_marginal" class="marginal-wrap side"></div>
         </div>
       </div>
@@ -1468,8 +1483,8 @@ __MODE_FILTER_OPTIONS__
                   <th>key_factor</th>
                   <th>track/context/spec</th>
                   <th>n_runs</th>
-                  <th>q_best</th>
-                  <th>q_median</th>
+                  <th>q_best (FDR)</th>
+                  <th>q_median (FDR)</th>
                   <th>strong_share</th>
                   <th>validated_share</th>
                 </tr>
@@ -1485,8 +1500,8 @@ __MODE_FILTER_OPTIONS__
                   <th>rank</th>
                   <th>key_factor</th>
                   <th>n_runs</th>
-                  <th>q_best</th>
-                  <th>q_median</th>
+                  <th>q_best (FDR)</th>
+                  <th>q_median (FDR)</th>
                   <th>strong_share</th>
                   <th>validated_share</th>
                 </tr>
@@ -1496,171 +1511,176 @@ __MODE_FILTER_OPTIONS__
           </div>
         </div>
       </details>
-      <label>Equation Builder (Stepwise Fit + Uncertainty)</label>
-      <div class="toolbar">
-        <label for="eq_run_id" style="margin:0; align-self:center;">run_id</label>
-        <input id="eq_run_id" style="width:280px;" placeholder="run summary source run_id" />
-        <label for="eq_track" style="margin:0; align-self:center;">track</label>
-        <select id="eq_track" style="width:auto; min-width:170px;">
-          <option value="primary_strict">primary_strict</option>
-          <option value="sensitivity_broad_company_no_edu">sensitivity_broad_company_no_edu</option>
-          <option value="all">all</option>
-        </select>
-        <label for="eq_y_col" style="margin:0; align-self:center;">y</label>
-        <select id="eq_y_col" style="width:auto; min-width:120px;">
-          <option value="y_all">y_all</option>
-          <option value="y_evidence">y_evidence</option>
-        </select>
-        <label for="eq_split_role" style="margin:0; align-self:center;">split</label>
-        <select id="eq_split_role" style="width:auto; min-width:120px;">
-          <option value="validation" selected>validation</option>
-          <option value="discovery">discovery</option>
-          <option value="all">all</option>
-        </select>
-      </div>
-      <div class="toolbar">
-        <label for="eq_top_k" style="margin:0; align-self:center;">top_k factors</label>
-        <select id="eq_top_k" style="width:auto; min-width:80px;">
-          <option value="3">3</option>
-          <option value="5" selected>5</option>
-          <option value="8">8</option>
-          <option value="10">10</option>
-        </select>
-        <label for="eq_max_steps" style="margin:0; align-self:center;">max_steps</label>
-        <select id="eq_max_steps" style="width:auto; min-width:92px;">
-          <option value="3">3</option>
-          <option value="5" selected>5</option>
-          <option value="8">8</option>
-          <option value="10">10</option>
-          <option value="15">15</option>
-        </select>
-        <label for="eq_bootstrap_n" style="margin:0; align-self:center;">bootstrap</label>
-        <select id="eq_bootstrap_n" style="width:auto; min-width:88px;">
-          <option value="0">0</option>
-          <option value="19">19</option>
-          <option value="49" selected>49</option>
-          <option value="99">99</option>
-        </select>
-        <label class="inline"><input id="eq_include_base_controls" type="checkbox" checked /> include base controls</label>
-        <label class="inline"><input id="eq_include_baseline" type="checkbox" checked /> show baseline step</label>
-        <button id="eq_use_top_factors_btn" class="ghost">Use Explorer Top Factors</button>
-        <button id="eq_build_btn" class="secondary">Build Step Curve</button>
-      </div>
-      <div class="row">
-        <div>
-          <label for="eq_factor_list">factor list (one per line or comma separated)</label>
-          <textarea id="eq_factor_list" class="equation-factor-box" placeholder="is_academia_origin&#10;pa__institutions_distinct_count"></textarea>
+      <details class="viz-card fold-card explorer-deep-dive-fold" id="explorer_deep_dive_fold">
+        <summary>Deep Dive: Equation Builder / SHAP-lite / Network</summary>
+        <div class="fold-body">
+          <label>Equation Builder (Stepwise Fit + Uncertainty)</label>
+          <div class="toolbar">
+            <label for="eq_run_id" style="margin:0; align-self:center;">run_id</label>
+            <input id="eq_run_id" style="width:280px;" placeholder="run summary source run_id" />
+            <label for="eq_track" style="margin:0; align-self:center;">track</label>
+            <select id="eq_track" style="width:auto; min-width:170px;">
+              <option value="primary_strict">primary_strict</option>
+              <option value="sensitivity_broad_company_no_edu">sensitivity_broad_company_no_edu</option>
+              <option value="all">all</option>
+            </select>
+            <label for="eq_y_col" style="margin:0; align-self:center;">y</label>
+            <select id="eq_y_col" style="width:auto; min-width:120px;">
+              <option value="y_all">y_all</option>
+              <option value="y_evidence">y_evidence</option>
+            </select>
+            <label for="eq_split_role" style="margin:0; align-self:center;">split</label>
+            <select id="eq_split_role" style="width:auto; min-width:120px;">
+              <option value="validation" selected>validation</option>
+              <option value="discovery">discovery</option>
+              <option value="all">all</option>
+            </select>
+          </div>
+          <div class="toolbar">
+            <label for="eq_top_k" style="margin:0; align-self:center;">top_k factors</label>
+            <select id="eq_top_k" style="width:auto; min-width:80px;">
+              <option value="3">3</option>
+              <option value="5" selected>5</option>
+              <option value="8">8</option>
+              <option value="10">10</option>
+            </select>
+            <label for="eq_max_steps" style="margin:0; align-self:center;">max_steps</label>
+            <select id="eq_max_steps" style="width:auto; min-width:92px;">
+              <option value="3">3</option>
+              <option value="5" selected>5</option>
+              <option value="8">8</option>
+              <option value="10">10</option>
+              <option value="15">15</option>
+            </select>
+            <label for="eq_bootstrap_n" style="margin:0; align-self:center;">bootstrap</label>
+            <select id="eq_bootstrap_n" style="width:auto; min-width:88px;">
+              <option value="0">0</option>
+              <option value="19">19</option>
+              <option value="49" selected>49</option>
+              <option value="99">99</option>
+            </select>
+            <label class="inline"><input id="eq_include_base_controls" type="checkbox" checked /> include base controls</label>
+            <label class="inline"><input id="eq_include_baseline" type="checkbox" checked /> show baseline step</label>
+            <button id="eq_use_top_factors_btn" class="ghost">Use Explorer Top Factors</button>
+            <button id="eq_build_btn" class="secondary">Build Step Curve</button>
+          </div>
+          <div class="row">
+            <div>
+              <label for="eq_factor_list">factor list (one per line or comma separated)</label>
+              <textarea id="eq_factor_list" class="equation-factor-box" placeholder="is_academia_origin&#10;pa__institutions_distinct_count"></textarea>
+            </div>
+          </div>
+          <div id="eq_notice" class="notice">ready</div>
+          <div class="run-table-wrap compact-table">
+            <table>
+              <tbody id="eq_meta_tbody"></tbody>
+            </table>
+          </div>
+          <div class="viz-card" style="margin-top: 8px;">
+            <h3>Event Accuracy by Step (95% uncertainty)</h3>
+            <div id="eq_curve_chart" class="equation-chart-wrap"></div>
+            <div id="eq_curve_hint" class="footer-note">accuracy = correctly predicted choice events / informative events (conditional logit)</div>
+          </div>
+          <div class="run-table-wrap" style="margin-top: 8px;">
+            <table>
+              <thead>
+                <tr>
+                  <th>step</th>
+                  <th>added factor</th>
+                  <th>atoms</th>
+                  <th>equation</th>
+                  <th>events</th>
+                  <th>accuracy mean</th>
+                  <th>accuracy 95% CI</th>
+                  <th>delta acc</th>
+                  <th>delta 95% CI</th>
+                  <th>|delta| share</th>
+                  <th>llf/event mean</th>
+                  <th>bootstrap</th>
+                </tr>
+              </thead>
+              <tbody id="eq_step_tbody"></tbody>
+            </table>
+          </div>
+          <label>SHAP-lite Atom Contributions</label>
+          <div id="eq_group_notice" class="hint-box">group coverage: 0 atoms</div>
+          <div class="run-table-wrap" style="margin-top: 8px;">
+            <table>
+              <thead>
+                <tr>
+                  <th>rank</th>
+                  <th>atom</th>
+                  <th>contrib sum</th>
+                  <th>|contrib| share</th>
+                  <th>steps</th>
+                  <th>factors</th>
+                </tr>
+              </thead>
+              <tbody id="eq_group_tbody"></tbody>
+            </table>
+          </div>
+          <label>High-Affinity Pairs</label>
+          <div class="run-table-wrap" style="margin-top: 8px;">
+            <table>
+              <thead>
+                <tr>
+                  <th>rank</th>
+                  <th>pair</th>
+                  <th>co_runs</th>
+                  <th>run_share</th>
+                  <th>jaccard</th>
+                  <th>lift</th>
+                </tr>
+              </thead>
+              <tbody id="explorer_pair_tbody"></tbody>
+            </table>
+          </div>
+          <label>Grouped Factors (high co-occurrence)</label>
+          <div class="toolbar">
+            <label for="explorer_cluster_filter_text" style="margin:0; align-self:center;">factor contains</label>
+            <input id="explorer_cluster_filter_text" style="width:220px;" placeholder="e.g. is_academia_origin" />
+            <label for="explorer_cluster_min_support" style="margin:0; align-self:center;">min run support</label>
+            <select id="explorer_cluster_min_support" style="width:auto; min-width:92px;">
+              <option value="1" selected>1+</option>
+              <option value="2">2+</option>
+              <option value="3">3+</option>
+              <option value="5">5+</option>
+              <option value="10">10+</option>
+            </select>
+            <label for="explorer_cluster_sort_key" style="margin:0; align-self:center;">sort</label>
+            <select id="explorer_cluster_sort_key" style="width:auto; min-width:180px;">
+              <option value="support_desc" selected>run support (high)</option>
+              <option value="factors_desc">n_factors (high)</option>
+              <option value="signature_asc">cluster (A-Z)</option>
+            </select>
+            <label for="explorer_cluster_limit" style="margin:0; align-self:center;">rows</label>
+            <select id="explorer_cluster_limit" style="width:auto; min-width:84px;">
+              <option value="10">10</option>
+              <option value="20" selected>20</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+            </select>
+            <button id="explorer_cluster_reset_btn" class="ghost">Reset Filter</button>
+          </div>
+          <div id="explorer_cluster_notice" class="hint-box">showing 0 / 0 clusters</div>
+          <div class="run-table-wrap" style="margin-top: 8px;">
+            <table>
+              <thead>
+                <tr>
+                  <th>cluster</th>
+                  <th>n_factors</th>
+                  <th>run_support</th>
+                  <th>factors</th>
+                </tr>
+              </thead>
+              <tbody id="explorer_cluster_tbody"></tbody>
+            </table>
+          </div>
+          <details>
+            <summary>Explorer Raw JSON (debug)</summary>
+            <div id="explorer_raw_box" class="mono">{}</div>
+          </details>
         </div>
-      </div>
-      <div id="eq_notice" class="notice">ready</div>
-      <div class="run-table-wrap compact-table">
-        <table>
-          <tbody id="eq_meta_tbody"></tbody>
-        </table>
-      </div>
-      <div class="viz-card" style="margin-top: 8px;">
-        <h3>Event Accuracy by Step (95% uncertainty)</h3>
-        <div id="eq_curve_chart" class="equation-chart-wrap"></div>
-        <div id="eq_curve_hint" class="footer-note">accuracy = correctly predicted choice events / informative events (conditional logit)</div>
-      </div>
-      <div class="run-table-wrap" style="margin-top: 8px;">
-        <table>
-          <thead>
-            <tr>
-              <th>step</th>
-              <th>added factor</th>
-              <th>atoms</th>
-              <th>equation</th>
-              <th>events</th>
-              <th>accuracy mean</th>
-              <th>accuracy 95% CI</th>
-              <th>delta acc</th>
-              <th>delta 95% CI</th>
-              <th>|delta| share</th>
-              <th>llf/event mean</th>
-              <th>bootstrap</th>
-            </tr>
-          </thead>
-          <tbody id="eq_step_tbody"></tbody>
-        </table>
-      </div>
-      <label>SHAP-lite Atom Contributions</label>
-      <div id="eq_group_notice" class="hint-box">group coverage: 0 atoms</div>
-      <div class="run-table-wrap" style="margin-top: 8px;">
-        <table>
-          <thead>
-            <tr>
-              <th>rank</th>
-              <th>atom</th>
-              <th>contrib sum</th>
-              <th>|contrib| share</th>
-              <th>steps</th>
-              <th>factors</th>
-            </tr>
-          </thead>
-          <tbody id="eq_group_tbody"></tbody>
-        </table>
-      </div>
-      <label>High-Affinity Pairs</label>
-      <div class="run-table-wrap" style="margin-top: 8px;">
-        <table>
-          <thead>
-            <tr>
-              <th>rank</th>
-              <th>pair</th>
-              <th>co_runs</th>
-              <th>run_share</th>
-              <th>jaccard</th>
-              <th>lift</th>
-            </tr>
-          </thead>
-          <tbody id="explorer_pair_tbody"></tbody>
-        </table>
-      </div>
-      <label>Grouped Factors (high co-occurrence)</label>
-      <div class="toolbar">
-        <label for="explorer_cluster_filter_text" style="margin:0; align-self:center;">factor contains</label>
-        <input id="explorer_cluster_filter_text" style="width:220px;" placeholder="e.g. is_academia_origin" />
-        <label for="explorer_cluster_min_support" style="margin:0; align-self:center;">min run support</label>
-        <select id="explorer_cluster_min_support" style="width:auto; min-width:92px;">
-          <option value="1" selected>1+</option>
-          <option value="2">2+</option>
-          <option value="3">3+</option>
-          <option value="5">5+</option>
-          <option value="10">10+</option>
-        </select>
-        <label for="explorer_cluster_sort_key" style="margin:0; align-self:center;">sort</label>
-        <select id="explorer_cluster_sort_key" style="width:auto; min-width:180px;">
-          <option value="support_desc" selected>run support (high)</option>
-          <option value="factors_desc">n_factors (high)</option>
-          <option value="signature_asc">cluster (A-Z)</option>
-        </select>
-        <label for="explorer_cluster_limit" style="margin:0; align-self:center;">rows</label>
-        <select id="explorer_cluster_limit" style="width:auto; min-width:84px;">
-          <option value="10">10</option>
-          <option value="20" selected>20</option>
-          <option value="50">50</option>
-          <option value="100">100</option>
-        </select>
-        <button id="explorer_cluster_reset_btn" class="ghost">Reset Filter</button>
-      </div>
-      <div id="explorer_cluster_notice" class="hint-box">showing 0 / 0 clusters</div>
-      <div class="run-table-wrap" style="margin-top: 8px;">
-        <table>
-          <thead>
-            <tr>
-              <th>cluster</th>
-              <th>n_factors</th>
-              <th>run_support</th>
-              <th>factors</th>
-            </tr>
-          </thead>
-          <tbody id="explorer_cluster_tbody"></tbody>
-        </table>
-      </div>
-      <details>
-        <summary>Explorer Raw JSON (debug)</summary>
-        <div id="explorer_raw_box" class="mono">{}</div>
       </details>
     </section>
   </div>
@@ -2895,7 +2915,7 @@ __MODE_FILTER_OPTIONS__
         setNotice(
           box,
           "ok",
-          "Verdict: promotable candidate signal (governance pass + q<=0.10 + restart stable)."
+          "Verdict: promotable candidate signal (governance pass + q(FDR)<=0.10 + restart stable)."
         );
         return;
       }
@@ -2934,7 +2954,7 @@ __MODE_FILTER_OPTIONS__
         { label: "evidence", value: evidenceText, cls: evidenceCls },
         { label: "stability", value: signal.restartSignal.text, cls: signal.restartSignal.cls },
         { label: "validated", value: fmt(metrics.validated_candidate_count), cls: evidenceCls },
-        { label: "best q", value: fmt(metrics.best_q_validation, 4), cls: signal.qSignal.cls },
+        { label: "best q (FDR)", value: fmt(metrics.best_q_validation, 4), cls: signal.qSignal.cls },
         { label: "restart mean", value: fmt(metrics.restart_validated_rate_mean, 3), cls: signal.restartSignal.cls },
         { label: "consensus demoted", value: demoted === null ? "-" : fmt(demoted), cls: demoted === null || demoted === 0 ? "kpi-pass" : "kpi-warn" },
       ];
@@ -4405,8 +4425,8 @@ __MODE_FILTER_OPTIONS__
       const pSelLabel = (selection.p_idx >= 0 && data.p_bins[selection.p_idx]) ? explorerJointRangeLabel(data.p_bins[selection.p_idx]) : "all";
       const cards = [
         { label: "visible/total", value: String(shown.length) + " / " + String(points.length) },
-        { label: "q<=" + fmt(qGate, 2), value: String(qPass) },
-        { label: "p<=0.05", value: String(pPass) },
+        { label: "q(FDR)<=" + fmt(qGate, 2), value: String(qPass) },
+        { label: "p(raw)<=0.05", value: String(pPass) },
         { label: "both pass", value: String(bothPass) },
         { label: "q filter", value: qSelLabel },
         { label: "p filter", value: pSelLabel },
@@ -4942,7 +4962,7 @@ __MODE_FILTER_OPTIONS__
           paper_bgcolor: "#ffffff",
           plot_bgcolor: "#f8fbff",
           xaxis: {
-            title: "best q (validation)",
+            title: "best q (FDR, validation)",
             range: [0, Number(data && data.x_max || 1)],
             tickformat: ".2f",
             gridcolor: "#edf3fb",
@@ -4950,7 +4970,7 @@ __MODE_FILTER_OPTIONS__
             fixedrange: true,
           },
           yaxis: {
-            title: "best p (validation)",
+            title: "best p (raw, validation)",
             range: [0, Number(data && data.y_max || 1)],
             tickformat: ".2f",
             gridcolor: "#edf3fb",
@@ -5023,8 +5043,8 @@ __MODE_FILTER_OPTIONS__
 
         meta.textContent =
           "visible points: " + String(shown.length) + " / " + String(points.length) +
-          " | q<=" + fmt(data.q_gate, 2) + ": " + String(shownQPass) +
-          " | p<=0.05: " + String(shownPPass) +
+          " | q(FDR)<=" + fmt(data.q_gate, 2) + ": " + String(shownQPass) +
+          " | p(raw)<=0.05: " + String(shownPPass) +
           " | both: " + String(shownBoth);
         return;
       }
@@ -5153,17 +5173,17 @@ __MODE_FILTER_OPTIONS__
       }
 
       const xLabel = mk("text", { x: layout.scatter.margin.left + layout.scatter.plot_w / 2, y: height - 8, "text-anchor": "middle", fill: "#384a61", "font-size": 11 });
-      xLabel.textContent = "best q (validation)";
+      xLabel.textContent = "best q (FDR, validation)";
       svg.appendChild(xLabel);
       const yLabel = mk("text", { x: 14, y: layout.scatter.margin.top + layout.scatter.plot_h / 2, transform: "rotate(-90 14 " + String(layout.scatter.margin.top + layout.scatter.plot_h / 2) + ")", "text-anchor": "middle", fill: "#384a61", "font-size": 11 });
-      yLabel.textContent = "best p (validation)";
+      yLabel.textContent = "best p (raw, validation)";
       svg.appendChild(yLabel);
 
       wrap.appendChild(svg);
       meta.textContent =
         "visible points: " + String(shown.length) + " / " + String(points.length) +
-        " | q<=" + fmt(data.q_gate, 2) + ": " + String(shownQPass) +
-        " | p<=0.05: " + String(shownPPass) +
+        " | q(FDR)<=" + fmt(data.q_gate, 2) + ": " + String(shownQPass) +
+        " | p(raw)<=0.05: " + String(shownPPass) +
         " | both: " + String(shownBoth);
     }
 
@@ -5551,7 +5571,7 @@ __MODE_FILTER_OPTIONS__
         signal.evidenceOk ? "kpi-pass" : (signal.validated !== null && signal.validated >= 1 ? "kpi-warn" : "kpi-fail")
       );
       appendOverviewRow(tbody, "validated candidates", fmt(metrics.validated_candidate_count));
-      appendOverviewRow(tbody, "best q (validation)", fmt(metrics.best_q_validation, 4));
+      appendOverviewRow(tbody, "best q (FDR, validation)", fmt(metrics.best_q_validation, 4));
       appendOverviewRow(tbody, "restart validated mean", fmt(metrics.restart_validated_rate_mean, 3));
       appendOverviewRow(
         tbody,
