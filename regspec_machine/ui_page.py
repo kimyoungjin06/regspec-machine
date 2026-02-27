@@ -304,6 +304,23 @@ def build_ui_page_html(*, run_modes: Iterable[str]) -> str:
       background: #f5f9ff;
       z-index: 1;
     }
+    th.sort-click {
+      cursor: pointer;
+      user-select: none;
+    }
+    th.sort-click:hover {
+      text-decoration: underline;
+    }
+    th.sort-active[data-sort-dir="asc"]::after {
+      content: "  ▲";
+      color: var(--accent);
+      font-size: 10px;
+    }
+    th.sort-active[data-sort-dir="desc"]::after {
+      content: "  ▼";
+      color: var(--accent);
+      font-size: 10px;
+    }
     td .mini {
       margin-right: 4px;
       margin-bottom: 3px;
@@ -595,6 +612,15 @@ def build_ui_page_html(*, run_modes: Iterable[str]) -> str:
     #section_explorer_sweep .toolbar {
       gap: 6px;
       margin-top: 6px;
+    }
+    #section_explorer_sweep .explorer-sticky-toolbar {
+      position: sticky;
+      top: 10px;
+      z-index: 10;
+      background: rgba(247, 251, 255, 0.96);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 6px 8px;
     }
     #section_explorer_sweep .notice,
     #section_explorer_sweep .hint-box {
@@ -1315,13 +1341,13 @@ __MODE_FILTER_OPTIONS__
       <div class="footer-note">Actions call API endpoints directly. Cancel/Retry follow orchestrator transition rules.</div>
     </section>
 
-    <section class="card" style="margin-top: 14px;" id="section_explorer_sweep">
-      <h2>Explorer Sweep (Across Runs)</h2>
-      <div class="toolbar">
-        <button id="explorer_refresh_btn" class="secondary">Refresh Explorer</button>
-        <label for="explorer_mode_scope" style="margin:0; align-self:center;">mode</label>
-        <select id="explorer_mode_scope" style="width:auto; min-width:160px;">
-          <option value="all">all</option>
+      <section class="card" style="margin-top: 14px;" id="section_explorer_sweep">
+        <h2>Explorer Sweep (Across Runs)</h2>
+        <div class="toolbar explorer-sticky-toolbar">
+          <button id="explorer_refresh_btn" class="secondary">Refresh Explorer</button>
+          <label for="explorer_mode_scope" style="margin:0; align-self:center;">mode</label>
+          <select id="explorer_mode_scope" style="width:auto; min-width:160px;">
+            <option value="all">all</option>
           <option value="singlex">singlex*</option>
           <option value="nooption">nooption*</option>
           <option value="paired">paired*</option>
@@ -1449,49 +1475,55 @@ __MODE_FILTER_OPTIONS__
           </div>
         </div>
       </details>
-      <details class="viz-card fold-card explorer-table-fold" id="explorer_tables_fold">
-        <summary>Top Combinations / Top Key Factors</summary>
-        <div class="fold-body">
-          <label>Top Combinations</label>
-          <div class="toolbar">
-            <label for="explorer_combo_filter_text" style="margin:0; align-self:center;">factor contains</label>
-            <input id="explorer_combo_filter_text" style="width:220px;" placeholder="e.g. is_academia_origin" />
-            <label for="explorer_combo_sort_key" style="margin:0; align-self:center;">sort</label>
-            <select id="explorer_combo_sort_key" style="width:auto; min-width:190px;">
-              <option value="q_best_asc" selected>q_best (low)</option>
-              <option value="q_median_asc">q_median (low)</option>
-              <option value="n_runs_desc">n_runs (high)</option>
-              <option value="strong_share_desc">strong_share (high)</option>
-              <option value="validated_share_desc">validated_share (high)</option>
-              <option value="key_factor_asc">key_factor (A-Z)</option>
-            </select>
-            <label for="explorer_combo_limit" style="margin:0; align-self:center;">rows</label>
-            <select id="explorer_combo_limit" style="width:auto; min-width:84px;">
-              <option value="10">10</option>
+        <details class="viz-card fold-card explorer-table-fold" id="explorer_tables_fold">
+          <summary>Top Combinations / Top Key Factors</summary>
+          <div class="fold-body">
+            <label>Top Combinations</label>
+            <div class="toolbar">
+              <label for="explorer_combo_filter_text" style="margin:0; align-self:center;">search</label>
+              <input id="explorer_combo_filter_text" style="width:260px;" placeholder="e.g. is_academia_origin / primary_strict / baseline" title="matches key_factor OR track/context/spec" />
+              <label for="explorer_combo_sort_key" style="margin:0; align-self:center;">sort</label>
+              <select id="explorer_combo_sort_key" style="width:auto; min-width:190px;">
+                <option value="q_best_asc" selected>q_best (low)</option>
+                <option value="q_best_desc">q_best (high)</option>
+                <option value="q_median_asc">q_median (low)</option>
+                <option value="q_median_desc">q_median (high)</option>
+                <option value="n_runs_desc">n_runs (high)</option>
+                <option value="n_runs_asc">n_runs (low)</option>
+                <option value="strong_share_desc">strong_share (high)</option>
+                <option value="strong_share_asc">strong_share (low)</option>
+                <option value="validated_share_desc">validated_share (high)</option>
+                <option value="validated_share_asc">validated_share (low)</option>
+                <option value="key_factor_asc">key_factor (A-Z)</option>
+                <option value="key_factor_desc">key_factor (Z-A)</option>
+              </select>
+              <label for="explorer_combo_limit" style="margin:0; align-self:center;">rows</label>
+              <select id="explorer_combo_limit" style="width:auto; min-width:84px;">
+                <option value="10">10</option>
               <option value="20" selected>20</option>
               <option value="50">50</option>
               <option value="100">100</option>
             </select>
             <button id="explorer_combo_reset_btn" class="ghost">Reset Filter</button>
-          </div>
-          <div id="explorer_combo_notice" class="hint-box">showing 0 / 0 combinations</div>
-          <div class="run-table-wrap" style="margin-top: 8px;">
-            <table>
-              <thead>
-                <tr>
-                  <th>rank</th>
-                  <th>key_factor</th>
-                  <th>track/context/spec</th>
-                  <th>n_runs</th>
-                  <th>q_best (FDR)</th>
-                  <th>q_median (FDR)</th>
-                  <th>strong_share</th>
-                  <th>validated_share</th>
-                </tr>
-              </thead>
-              <tbody id="explorer_combo_tbody"></tbody>
-            </table>
-          </div>
+            </div>
+            <div id="explorer_combo_notice" class="hint-box">showing 0 / 0 combinations</div>
+            <div class="run-table-wrap" style="margin-top: 8px;">
+              <table id="explorer_combo_table">
+                <thead>
+                  <tr>
+                    <th>rank</th>
+                    <th class="sort-click" data-sort-key="key_factor" title="click to sort">key_factor</th>
+                    <th>track/context/spec</th>
+                    <th class="sort-click" data-sort-key="n_runs" title="click to sort">n_runs</th>
+                    <th class="sort-click" data-sort-key="q_best" title="click to sort">q_best (FDR)</th>
+                    <th class="sort-click" data-sort-key="q_median" title="click to sort">q_median (FDR)</th>
+                    <th class="sort-click" data-sort-key="strong_share" title="click to sort">strong_share</th>
+                    <th class="sort-click" data-sort-key="validated_share" title="click to sort">validated_share</th>
+                  </tr>
+                </thead>
+                <tbody id="explorer_combo_tbody"></tbody>
+              </table>
+            </div>
           <label>Top Key Factors</label>
           <div class="run-table-wrap" style="margin-top: 8px;">
             <table>
@@ -3148,10 +3180,10 @@ __MODE_FILTER_OPTIONS__
       }
     }
 
-    function filteredExplorerComboRows(rows) {
-      const data = Array.isArray(rows) ? rows.slice() : [];
-      const q = String(byId("explorer_combo_filter_text").value || "").trim().toLowerCase();
-      const sortKey = String(byId("explorer_combo_sort_key").value || "q_best_asc");
+      function filteredExplorerComboRows(rows) {
+        const data = Array.isArray(rows) ? rows.slice() : [];
+        const q = String(byId("explorer_combo_filter_text").value || "").trim().toLowerCase();
+        const sortKey = String(byId("explorer_combo_sort_key").value || "q_best_asc");
       const rowLimitRaw = Number(byId("explorer_combo_limit").value || "20");
       const rowLimit = Number.isFinite(rowLimitRaw) ? Math.max(1, Math.floor(rowLimitRaw)) : 20;
 
@@ -3172,39 +3204,71 @@ __MODE_FILTER_OPTIONS__
         return Number.isFinite(n) ? n : fallback;
       };
 
-      if (sortKey === "q_median_asc") {
-        filtered.sort((a, b) =>
-          safeNum(a && a.q_median, 9.99) - safeNum(b && b.q_median, 9.99) ||
-          safeNum(b && b.n_runs, 0) - safeNum(a && a.n_runs, 0) ||
-          String(a && a.key_factor || "").localeCompare(String(b && b.key_factor || ""))
-        );
-      } else if (sortKey === "n_runs_desc") {
-        filtered.sort((a, b) =>
-          safeNum(b && b.n_runs, 0) - safeNum(a && a.n_runs, 0) ||
-          safeNum(a && a.q_best, 9.99) - safeNum(b && b.q_best, 9.99)
-        );
-      } else if (sortKey === "strong_share_desc") {
-        filtered.sort((a, b) =>
-          safeNum(b && b.strong_share_q, 0) - safeNum(a && a.strong_share_q, 0) ||
-          safeNum(a && a.q_best, 9.99) - safeNum(b && b.q_best, 9.99)
-        );
-      } else if (sortKey === "validated_share_desc") {
-        filtered.sort((a, b) =>
-          safeNum(b && b.validated_share, 0) - safeNum(a && a.validated_share, 0) ||
-          safeNum(a && a.q_best, 9.99) - safeNum(b && b.q_best, 9.99)
-        );
-      } else if (sortKey === "key_factor_asc") {
-        filtered.sort((a, b) =>
-          String(a && a.key_factor || "").localeCompare(String(b && b.key_factor || "")) ||
-          safeNum(a && a.q_best, 9.99) - safeNum(b && b.q_best, 9.99)
-        );
-      } else {
-        filtered.sort((a, b) =>
-          safeNum(a && a.q_best, 9.99) - safeNum(b && b.q_best, 9.99) ||
-          safeNum(b && b.n_runs, 0) - safeNum(a && a.n_runs, 0) ||
-          String(a && a.key_factor || "").localeCompare(String(b && b.key_factor || ""))
-        );
-      }
+        if (sortKey === "q_median_asc") {
+          filtered.sort((a, b) =>
+            safeNum(a && a.q_median, 9.99) - safeNum(b && b.q_median, 9.99) ||
+            safeNum(b && b.n_runs, 0) - safeNum(a && a.n_runs, 0) ||
+            String(a && a.key_factor || "").localeCompare(String(b && b.key_factor || ""))
+          );
+        } else if (sortKey === "q_median_desc") {
+          filtered.sort((a, b) =>
+            safeNum(b && b.q_median, 0) - safeNum(a && a.q_median, 0) ||
+            safeNum(b && b.n_runs, 0) - safeNum(a && a.n_runs, 0) ||
+            String(a && a.key_factor || "").localeCompare(String(b && b.key_factor || ""))
+          );
+        } else if (sortKey === "n_runs_desc") {
+          filtered.sort((a, b) =>
+            safeNum(b && b.n_runs, 0) - safeNum(a && a.n_runs, 0) ||
+            safeNum(a && a.q_best, 9.99) - safeNum(b && b.q_best, 9.99)
+          );
+        } else if (sortKey === "n_runs_asc") {
+          filtered.sort((a, b) =>
+            safeNum(a && a.n_runs, 0) - safeNum(b && b.n_runs, 0) ||
+            safeNum(a && a.q_best, 9.99) - safeNum(b && b.q_best, 9.99)
+          );
+        } else if (sortKey === "strong_share_desc") {
+          filtered.sort((a, b) =>
+            safeNum(b && b.strong_share_q, 0) - safeNum(a && a.strong_share_q, 0) ||
+            safeNum(a && a.q_best, 9.99) - safeNum(b && b.q_best, 9.99)
+          );
+        } else if (sortKey === "strong_share_asc") {
+          filtered.sort((a, b) =>
+            safeNum(a && a.strong_share_q, 0) - safeNum(b && b.strong_share_q, 0) ||
+            safeNum(a && a.q_best, 9.99) - safeNum(b && b.q_best, 9.99)
+          );
+        } else if (sortKey === "validated_share_desc") {
+          filtered.sort((a, b) =>
+            safeNum(b && b.validated_share, 0) - safeNum(a && a.validated_share, 0) ||
+            safeNum(a && a.q_best, 9.99) - safeNum(b && b.q_best, 9.99)
+          );
+        } else if (sortKey === "validated_share_asc") {
+          filtered.sort((a, b) =>
+            safeNum(a && a.validated_share, 0) - safeNum(b && b.validated_share, 0) ||
+            safeNum(a && a.q_best, 9.99) - safeNum(b && b.q_best, 9.99)
+          );
+        } else if (sortKey === "key_factor_asc") {
+          filtered.sort((a, b) =>
+            String(a && a.key_factor || "").localeCompare(String(b && b.key_factor || "")) ||
+            safeNum(a && a.q_best, 9.99) - safeNum(b && b.q_best, 9.99)
+          );
+        } else if (sortKey === "key_factor_desc") {
+          filtered.sort((a, b) =>
+            String(b && b.key_factor || "").localeCompare(String(a && a.key_factor || "")) ||
+            safeNum(a && a.q_best, 9.99) - safeNum(b && b.q_best, 9.99)
+          );
+        } else if (sortKey === "q_best_desc") {
+          filtered.sort((a, b) =>
+            safeNum(b && b.q_best, 0) - safeNum(a && a.q_best, 0) ||
+            safeNum(b && b.n_runs, 0) - safeNum(a && a.n_runs, 0) ||
+            String(a && a.key_factor || "").localeCompare(String(b && b.key_factor || ""))
+          );
+        } else {
+          filtered.sort((a, b) =>
+            safeNum(a && a.q_best, 9.99) - safeNum(b && b.q_best, 9.99) ||
+            safeNum(b && b.n_runs, 0) - safeNum(a && a.n_runs, 0) ||
+            String(a && a.key_factor || "").localeCompare(String(b && b.key_factor || ""))
+          );
+        }
 
       const limited = filtered.slice(0, rowLimit);
       return {
@@ -3214,14 +3278,15 @@ __MODE_FILTER_OPTIONS__
       };
     }
 
-    function renderExplorerComboTable(rows) {
-      const tbody = byId("explorer_combo_tbody");
-      tbody.replaceChildren();
-      const out = filteredExplorerComboRows(rows);
-      const data = out.rows;
-      const focus = UI_STATE.explorerFocus && typeof UI_STATE.explorerFocus === "object"
-        ? UI_STATE.explorerFocus
-        : {};
+      function renderExplorerComboTable(rows) {
+        const tbody = byId("explorer_combo_tbody");
+        tbody.replaceChildren();
+        updateExplorerComboSortHeaders();
+        const out = filteredExplorerComboRows(rows);
+        const data = out.rows;
+        const focus = UI_STATE.explorerFocus && typeof UI_STATE.explorerFocus === "object"
+          ? UI_STATE.explorerFocus
+          : {};
       const focusComboId = String(focus.combo_id || "").trim();
       byId("explorer_combo_notice").textContent =
         "showing " + String(data.length) + " / " + String(out.filtered) + " combinations (from " + String(out.total) + ")";
@@ -3277,11 +3342,67 @@ __MODE_FILTER_OPTIONS__
       renderExplorerFocusPanelFromState();
     }
 
-    function resetExplorerComboControls() {
-      byId("explorer_combo_filter_text").value = "";
-      byId("explorer_combo_sort_key").value = "q_best_asc";
-      byId("explorer_combo_limit").value = "20";
-    }
+      function resetExplorerComboControls() {
+        byId("explorer_combo_filter_text").value = "";
+        byId("explorer_combo_sort_key").value = "q_best_asc";
+        byId("explorer_combo_limit").value = "20";
+      }
+
+      function parseExplorerComboSortKey(sortKey) {
+        const raw = String(sortKey || "").trim();
+        const m = raw.match(/^([A-Za-z0-9_]+)_(asc|desc)$/);
+        if (!m) {
+          return { col: "q_best", dir: "asc" };
+        }
+        return { col: String(m[1]), dir: String(m[2]) };
+      }
+
+      function defaultExplorerComboSortDir(col) {
+        const c = String(col || "").trim();
+        if (c === "n_runs" || c === "strong_share" || c === "validated_share") return "desc";
+        return "asc";
+      }
+
+      function updateExplorerComboSortHeaders() {
+        const table = document.getElementById("explorer_combo_table");
+        if (!table) return;
+        const sortKey = String(byId("explorer_combo_sort_key").value || "q_best_asc");
+        const parsed = parseExplorerComboSortKey(sortKey);
+        const ths = table.querySelectorAll("thead th.sort-click");
+        ths.forEach((th) => {
+          th.classList.remove("sort-active");
+          th.removeAttribute("data-sort-dir");
+        });
+        const active = table.querySelector('thead th.sort-click[data-sort-key="' + parsed.col + '"]');
+        if (active) {
+          active.classList.add("sort-active");
+          active.setAttribute("data-sort-dir", parsed.dir);
+        }
+      }
+
+      function bindExplorerComboSortHeaders() {
+        const table = document.getElementById("explorer_combo_table");
+        if (!table) return;
+        const ths = table.querySelectorAll("thead th.sort-click");
+        ths.forEach((th) => {
+          th.addEventListener("click", () => {
+            const col = String(th.getAttribute("data-sort-key") || "").trim();
+            if (!col) return;
+            const current = parseExplorerComboSortKey(byId("explorer_combo_sort_key").value || "q_best_asc");
+            let dir = defaultExplorerComboSortDir(col);
+            if (current && current.col === col) {
+              dir = current.dir === "asc" ? "desc" : "asc";
+            }
+            const candidate = col + "_" + dir;
+            const sel = byId("explorer_combo_sort_key");
+            const exists = Array.from(sel.options).some((opt) => String(opt.value) === candidate);
+            sel.value = exists ? candidate : (col + "_" + defaultExplorerComboSortDir(col));
+            markUxAction("filter_applied");
+            rerenderExplorerComboFromState();
+          });
+        });
+        updateExplorerComboSortHeaders();
+      }
 
     function renderExplorerFactorTable(rows) {
       const tbody = byId("explorer_factor_tbody");
@@ -6791,6 +6912,7 @@ __MODE_FILTER_OPTIONS__
     applyRunsCompactView();
     resetUxBench();
     renderExplorerFocusRunSnapshot(null, "");
+    bindExplorerComboSortHeaders();
 
     refreshHealth();
     loadDatasetConfig().then(() => {
