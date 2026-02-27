@@ -5,14 +5,14 @@ objective: "무옵션 + singlex 동시 개선을 위한 governed spec-search 엔
 
 source_of_truth:
   docs:
-    - AGENTS.md
-    - docs/design/RegSpecMachine_UI_Agent_Architecture_WBS.md
-    - docs/design/Module03_RegSpecMachine_DocumentCurationPlan_2026-02-24.md
-    - modules/03_regspec_machine/README.md
-    - modules/03_regspec_machine/docs/README.md
-    - modules/03_regspec_machine/docs/specs/ARCHITECTURE.md
-    - modules/03_regspec_machine/docs/specs/CONTRACTS.md
-    - modules/03_regspec_machine/docs/specs/BASELINE_LOCK_2026-02-24.md
+    - README.md
+    - docs/README.md
+    - docs/specs/README.md
+    - docs/specs/CONSTITUTION.md
+    - docs/specs/TODO.md
+    - docs/specs/ARCHITECTURE.md
+    - docs/specs/CONTRACTS.md
+    - docs/specs/BASELINE_LOCK_2026-02-24.md
 
 inputs:
   required:
@@ -31,25 +31,23 @@ outputs:
 
 entrypoints:
   shell:
-    - modules/03_regspec_machine/scripts/run_module_03.sh
-    - modules/03_regspec_machine/scripts/smoke_module_03_migration_paths.sh
-    - modules/03_regspec_machine/scripts/check_module_03_contract_ci.py
-    - modules/03_regspec_machine/scripts/create_module_03_dataset_dump.sh
+    - scripts/run_module_03.sh
+    - scripts/smoke_module_03_migration_paths.sh
+    - scripts/check_module_03_contract_ci.py
+    - scripts/create_module_03_dataset_dump.sh
   canonical_scripts:
-    - modules/03_regspec_machine/scripts/modeling/run_phase_b_bikard_machine_scientist_scan.py
-    - modules/03_regspec_machine/scripts/modeling/run_phase_b_regspec_preset.py
-    - modules/03_regspec_machine/scripts/reporting/build_phase_b_regspec_dashboard.py
-    - modules/03_regspec_machine/scripts/check_module_03_contract_ci.py
-    - modules/03_regspec_machine/scripts/smoke_module_03_migration_paths.sh
-    - modules/03_regspec_machine/scripts/create_module_03_dataset_dump.sh
+    - scripts/modeling/run_phase_b_bikard_machine_scientist_scan.py
+    - scripts/modeling/run_phase_b_regspec_preset.py
+    - scripts/reporting/build_phase_b_regspec_dashboard.py
+    - scripts/check_module_03_contract_ci.py
+    - scripts/smoke_module_03_migration_paths.sh
+    - scripts/create_module_03_dataset_dump.sh
 
 runtime:
   python: .venv/bin/python
-  package_root: modules/03_regspec_machine
+  package_root: .
   execution_policy: "plan-by-default; execute with --exec"
 
 dependency_policy:
   hard_docs: []
-  soft_docs:
-    - AGENTS.md
-    - docs/design/RegSpecMachine_UI_Agent_Architecture_WBS.md
+  soft_docs: []

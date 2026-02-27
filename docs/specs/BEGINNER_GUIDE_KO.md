@@ -86,10 +86,10 @@
 권장 시작점은 `paired_nooption_singlex`입니다.
 
 ## 8) 가장 쉬운 실행 예시
-프로젝트 루트에서:
+프로젝트 루트(이 모듈 디렉토리)에서:
 
 ```bash
-.venv/bin/python modules/03_regspec_machine/scripts/modeling/run_phase_b_regspec_preset.py \
+.venv/bin/python scripts/modeling/run_phase_b_regspec_preset.py \
   --mode paired_nooption_singlex \
   --run-id phase_b_bikard_keyfactor_scan_pair_baseline_example_20260223 \
   --scan-n-bootstrap 49
@@ -98,7 +98,7 @@
 validation 게이트를 레거시 단일 게이트로 맞춰 비교하고 싶으면:
 
 ```bash
-.venv/bin/python modules/03_regspec_machine/scripts/modeling/run_phase_b_regspec_preset.py \
+.venv/bin/python scripts/modeling/run_phase_b_regspec_preset.py \
   --mode paired_nooption_singlex \
   --run-id phase_b_bikard_keyfactor_scan_pair_legacysync_example_20260223 \
   --scan-n-bootstrap 49 \

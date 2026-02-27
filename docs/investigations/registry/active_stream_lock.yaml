@@ -4,19 +4,19 @@ owner: modeling-team
 rationale: "nooption + singlex baseline 재현/게이트 확인이 현재 최우선 실행 스트림이다."
 
 active_stream_paths:
-  ongoing_doc: modules/03_regspec_machine/docs/investigations/streams/phase0_baseline/ongoing.md
-  note_doc: modules/03_regspec_machine/docs/investigations/streams/phase0_baseline/note.md
-  archive_dir: modules/03_regspec_machine/docs/investigations/streams/phase0_baseline/archive/
+  ongoing_doc: docs/investigations/streams/phase0_baseline/ongoing.md
+  note_doc: docs/investigations/streams/phase0_baseline/note.md
+  archive_dir: docs/investigations/streams/phase0_baseline/archive/
 
 bootstrap:
   must_run:
-    - "RUN_ID=phase0_baseline TAG=phase-0 ./modules/03_regspec_machine/scripts/run_module_03.sh paired --exec"
-    - "TAG=phase-0 ./modules/03_regspec_machine/scripts/run_module_03.sh contract-ci --exec"
+    - "RUN_ID=phase0_baseline TAG=phase-0 ./scripts/run_module_03.sh paired --exec"
+    - "TAG=phase-0 ./scripts/run_module_03.sh contract-ci --exec"
   must_check:
     - data/metadata/phase_b_bikard_machine_scientist_paired_preset_summary_phase0_baseline_paired.json
     - data/metadata/module03_contract_ci_summary_phase-0.json
   optional:
-    - "RUN_ID=phase0_baseline TAG=phase-0 ./modules/03_regspec_machine/scripts/run_module_03.sh overnight --exec"
+    - "RUN_ID=phase0_baseline TAG=phase-0 ./scripts/run_module_03.sh overnight --exec"
 
 entry_conditions:
   - "ongoing.md에 objective/must_run/must_check가 명시됨"
