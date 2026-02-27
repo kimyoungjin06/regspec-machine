@@ -1,0 +1,2 @@
+Legacy pre_lifecycle markdown documents were removed on 2026-02-26.
+Backup archive: archive/packed/legacy_markdown_purge_20260226T115148Z.tar.zst

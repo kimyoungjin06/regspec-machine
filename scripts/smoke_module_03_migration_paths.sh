@@ -123,6 +123,18 @@ check_path_exists() {
   fi
 }
 
+check_path_missing() {
+  local label="$1"
+  local path="$2"
+  if [[ ! -e "$path" ]]; then
+    pass_count=$((pass_count + 1))
+    detail_rows+=("{\"label\":\"$label\",\"path\":\"${path#$ROOT/}\",\"status\":\"pass\"}")
+  else
+    fail_count=$((fail_count + 1))
+    detail_rows+=("{\"label\":\"$label\",\"path\":\"${path#$ROOT/}\",\"status\":\"fail\"}")
+  fi
+}
+
 for f in "${new_modeling_files[@]}"; do
   check_help "new" "$new_modeling_dir/$f"
 done
@@ -131,10 +143,10 @@ for f in "${new_reporting_files[@]}"; do
 done
 if [[ "$IS_MONOREPO" -eq 1 ]]; then
   for f in "${legacy_modeling_files[@]}"; do
-    check_help "legacy" "$legacy_modeling_dir/$f"
+    check_path_missing "legacy_removed" "$legacy_modeling_dir/$f"
   done
   for f in "${legacy_reporting_files[@]}"; do
-    check_help "legacy" "$legacy_reporting_dir/$f"
+    check_path_missing "legacy_removed" "$legacy_reporting_dir/$f"
   done
 fi
 for p in "${asset_paths[@]}"; do

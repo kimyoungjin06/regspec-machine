@@ -10,9 +10,9 @@ source_of_truth:
     - docs/design/Module03_RegSpecMachine_DocumentCurationPlan_2026-02-24.md
     - modules/03_regspec_machine/README.md
     - modules/03_regspec_machine/docs/README.md
-    - modules/03_regspec_machine/docs/ARCHITECTURE.md
-    - modules/03_regspec_machine/docs/CONTRACTS.md
-    - modules/03_regspec_machine/docs/BASELINE_LOCK_2026-02-24.md
+    - modules/03_regspec_machine/docs/specs/ARCHITECTURE.md
+    - modules/03_regspec_machine/docs/specs/CONTRACTS.md
+    - modules/03_regspec_machine/docs/specs/BASELINE_LOCK_2026-02-24.md
 
 inputs:
   required:

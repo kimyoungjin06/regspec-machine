@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Module 03 contract CI checker (wrapper deprecation + contract integrity)."""
+"""Module 03 contract CI checker (wrapper removal + contract integrity)."""
 
 from __future__ import annotations
 
 import argparse
 import csv
 import json
+import re
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -15,9 +16,18 @@ from typing import Iterable, List, Sequence, Tuple
 
 
 WRAPPER_TO_CANONICAL_LOCAL: Sequence[Tuple[str, str]] = (
-    ("scripts/modeling/run_phase_b_bikard_machine_scientist_scan.py", "scripts/modeling/run_phase_b_bikard_machine_scientist_scan.py"),
-    ("scripts/modeling/run_phase_b_regspec_preset.py", "scripts/modeling/run_phase_b_regspec_preset.py"),
-    ("scripts/reporting/build_phase_b_regspec_dashboard.py", "scripts/reporting/build_phase_b_regspec_dashboard.py"),
+    (
+        "scripts/modeling/run_phase_b_bikard_machine_scientist_scan.py",
+        "scripts/modeling/run_phase_b_bikard_machine_scientist_scan.py",
+    ),
+    (
+        "scripts/modeling/run_phase_b_regspec_preset.py",
+        "scripts/modeling/run_phase_b_regspec_preset.py",
+    ),
+    (
+        "scripts/reporting/build_phase_b_regspec_dashboard.py",
+        "scripts/reporting/build_phase_b_regspec_dashboard.py",
+    ),
 )
 
 CANONICAL_ONLY_LOCAL: Sequence[str] = (
@@ -49,6 +59,12 @@ IGNORED_DIRS = {
 DOC_EXCLUDE_PREFIXES = (
     "docs/operations/RunLog.md",
     "docs/operations/investigations/",
+)
+
+# Operational checks should catch root-wrapper references used by executable code,
+# but ignore module03-local files where relative script paths are legitimate.
+OPERATIONAL_EXCLUDE_PREFIXES = (
+    "modules/03_regspec_machine/",
 )
 
 
@@ -117,7 +133,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--strict-removal-gate",
         action="store_true",
-        help="Exit non-zero if any wrapper is not removal-ready.",
+        help="Exit non-zero if any legacy wrapper is not removal-ready.",
     )
     return p.parse_args()
 
@@ -142,7 +158,8 @@ def safe_help_check(py_bin: Path, target: Path) -> bool:
     return proc.returncode == 0
 
 
-def iter_text_files(root: Path, roots: Iterable[str]) -> Iterable[Path]:
+def iter_text_files(root: Path, roots: Iterable[str], allowed_suffixes: Sequence[str]) -> Iterable[Path]:
+    allowed = {s.lower() for s in allowed_suffixes}
     for rel_root in roots:
         base = root / rel_root
         if not base.exists():
@@ -152,7 +169,7 @@ def iter_text_files(root: Path, roots: Iterable[str]) -> Iterable[Path]:
                 continue
             if any(part in IGNORED_DIRS for part in p.parts):
                 continue
-            if p.suffix.lower() not in {".py", ".sh", ".md", ".yaml", ".yml", ".txt", ".csv"}:
+            if p.suffix.lower() not in allowed:
                 continue
             yield p
 
@@ -163,17 +180,19 @@ def count_references(
     scan_roots: Sequence[str],
     excluded_paths: Sequence[str],
     excluded_prefixes: Sequence[str],
+    allowed_suffixes: Sequence[str],
 ) -> List[RefHit]:
     hits: List[RefHit] = []
     excluded_set = set(excluded_paths)
-    for path in iter_text_files(root, scan_roots):
+    pattern = re.compile(rf"(?<![/A-Za-z0-9_.-]){re.escape(needle)}(?![A-Za-z0-9_.-])")
+    for path in iter_text_files(root, scan_roots, allowed_suffixes=allowed_suffixes):
         rel = path.relative_to(root).as_posix()
         if rel in excluded_set:
             continue
         if any(rel.startswith(prefix) for prefix in excluded_prefixes):
             continue
         content = read_text(path)
-        cnt = content.count(needle)
+        cnt = len(pattern.findall(content))
         if cnt > 0:
             hits.append(RefHit(relpath=rel, count=cnt))
     return sorted(hits, key=lambda x: (x.relpath, x.count))
@@ -312,39 +331,65 @@ def main() -> int:
     required_assets = tuple(mrel(item) for item in REQUIRED_ASSETS_LOCAL)
 
     wrapper_rows: List[dict] = []
-    wrappers_removal_ready = True
     wrappers_any_fail = False
-    scan_roots = ("modules", "scripts", "docs") if is_monorepo else ("scripts", "docs")
+    n_wrappers_removal_ready = 0
+
+    scan_roots_operational = ("modules", "scripts") if is_monorepo else ("scripts",)
+    scan_roots_docs = ("modules", "docs") if is_monorepo else ("docs",)
     excluded_paths = ("modules/MODULE_PATH_MAP.csv",) if is_monorepo else tuple()
+    self_rel = Path(__file__).resolve().relative_to(root).as_posix()
+
     for wrapper_rel, canonical_rel in wrapper_to_canonical:
         wrapper_path = root / wrapper_rel
         canonical_path = root / canonical_rel
         wrapper_exists = wrapper_path.exists()
         canonical_exists = canonical_path.exists()
+
         wrapper_text = read_text(wrapper_path) if wrapper_exists else ""
-        marker_ok = canonical_rel in wrapper_text
-        wrapper_help_ok = bool(wrapper_exists and safe_help_check(py_bin, wrapper_path))
+        marker_ok = canonical_rel in wrapper_text if wrapper_exists else True
+        wrapper_help_ok = bool(wrapper_exists and safe_help_check(py_bin, wrapper_path)) if wrapper_exists else True
         canonical_help_ok = bool(canonical_exists and safe_help_check(py_bin, canonical_path))
-        ref_hits = count_references(
+
+        operational_hits = count_references(
             root=root,
             needle=wrapper_rel,
-            scan_roots=scan_roots,
-            excluded_paths=(wrapper_rel, *excluded_paths),
+            scan_roots=scan_roots_operational,
+            excluded_paths=(wrapper_rel, self_rel, *excluded_paths),
+            excluded_prefixes=OPERATIONAL_EXCLUDE_PREFIXES,
+            allowed_suffixes=(".py", ".sh"),
+        )
+        docs_hits = count_references(
+            root=root,
+            needle=wrapper_rel,
+            scan_roots=scan_roots_docs,
+            excluded_paths=(wrapper_rel,),
             excluded_prefixes=DOC_EXCLUDE_PREFIXES,
+            allowed_suffixes=(".md", ".txt", ".yaml", ".yml"),
         )
-        hit_count = sum(h.count for h in ref_hits)
-        removal_ready = (
-            wrapper_exists
-            and canonical_exists
-            and marker_ok
-            and wrapper_help_ok
-            and canonical_help_ok
-            and hit_count == 0
-        )
-        wrappers_removal_ready = wrappers_removal_ready and removal_ready
-        wrappers_any_fail = wrappers_any_fail or (
-            not wrapper_exists or not canonical_exists or not marker_ok or not wrapper_help_ok or not canonical_help_ok
-        )
+
+        operational_ref_count = sum(h.count for h in operational_hits)
+        docs_ref_count = sum(h.count for h in docs_hits)
+
+        blocking_reasons: List[str] = []
+        if not canonical_exists:
+            blocking_reasons.append("missing_canonical")
+        if not canonical_help_ok:
+            blocking_reasons.append("canonical_help_fail")
+        if wrapper_exists:
+            blocking_reasons.append("wrapper_still_present")
+            if not marker_ok:
+                blocking_reasons.append("wrapper_target_mismatch")
+            if not wrapper_help_ok:
+                blocking_reasons.append("wrapper_help_fail")
+        if operational_ref_count > 0:
+            blocking_reasons.append("operational_refs_present")
+
+        removal_ready = len(blocking_reasons) == 0
+        if removal_ready:
+            n_wrappers_removal_ready += 1
+        else:
+            wrappers_any_fail = True
+
         wrapper_rows.append(
             {
                 "wrapper_path": wrapper_rel,
@@ -354,9 +399,12 @@ def main() -> int:
                 "wrapper_help_ok": int(wrapper_help_ok),
                 "canonical_help_ok": int(canonical_help_ok),
                 "wrapper_forward_marker_ok": int(marker_ok),
-                "reference_hits_nonexcluded": int(hit_count),
-                "reference_hit_files": ";".join(h.relpath for h in ref_hits),
+                "operational_ref_count": int(operational_ref_count),
+                "docs_ref_count": int(docs_ref_count),
+                "operational_ref_files": ";".join(h.relpath for h in operational_hits),
+                "docs_ref_files": ";".join(h.relpath for h in docs_hits),
                 "removal_ready": int(removal_ready),
+                "blocking_reasons": ",".join(blocking_reasons),
             }
         )
 
@@ -367,12 +415,11 @@ def main() -> int:
     contract_scripts_norm = [_normalize_contract_path_token(x) for x in contract_scripts]
     contract_scripts_match = contract_scripts_norm == expected_scripts_norm
     contract_shell = parse_contract_shell_entrypoints(contract_path)
+
     required_inputs = parse_contract_required_inputs(contract_path)
     required_input_checks = {rel: path_entry_exists(root, rel) for rel in required_inputs}
     required_inputs_check_mode = "enforced_monorepo" if is_monorepo else "informational_standalone"
-    required_inputs_ok = (
-        all(required_input_checks.values()) if required_input_checks else True
-    ) if is_monorepo else True
+    required_inputs_ok = (all(required_input_checks.values()) if required_input_checks else True) if is_monorepo else True
 
     required_asset_rows = []
     required_assets_ok = True
@@ -380,6 +427,23 @@ def main() -> int:
         exists = (root / rel).exists()
         required_asset_rows.append({"path": rel, "exists": int(exists)})
         required_assets_ok = required_assets_ok and exists
+
+    wrappers_total = int(len(wrapper_rows))
+    wrappers_blocked = int(wrappers_total - n_wrappers_removal_ready)
+
+    checks = {
+        "wrappers_any_fail": bool(wrappers_any_fail),
+        "wrappers_all_removal_ready": wrappers_blocked == 0,
+        "required_assets_ok": bool(required_assets_ok),
+        "required_inputs_ok": bool(required_inputs_ok),
+        "contract_canonical_scripts_match_expected": bool(contract_scripts_match),
+    }
+    overall_ok = (
+        checks["required_assets_ok"]
+        and checks["required_inputs_ok"]
+        and checks["contract_canonical_scripts_match_expected"]
+        and (wrappers_total == 0 or checks["wrappers_all_removal_ready"])
+    )
 
     summary = {
         "module_id": "03_regspec_machine",
@@ -391,33 +455,22 @@ def main() -> int:
             "topology": "monorepo" if is_monorepo else "standalone_module03",
             "module_root": str(module_root.relative_to(root) if module_root.is_relative_to(root) else module_root),
         },
-        "checks": {
-            "wrappers_any_fail": bool(wrappers_any_fail),
-            "wrappers_all_removal_ready": bool(wrappers_removal_ready),
-            "required_assets_ok": bool(required_assets_ok),
-            "required_inputs_ok": bool(required_inputs_ok),
-            "contract_canonical_scripts_match_expected": bool(contract_scripts_match),
-        },
+        "checks": checks,
         "counts": {
-            "wrappers_total": int(len(wrapper_rows)),
-            "wrappers_with_failures": int(
-                sum(
-                    1
-                    for r in wrapper_rows
-                    if (
-                        r["wrapper_exists"] == 0
-                        or r["canonical_exists"] == 0
-                        or r["wrapper_help_ok"] == 0
-                        or r["canonical_help_ok"] == 0
-                        or r["wrapper_forward_marker_ok"] == 0
-                    )
-                )
-            ),
-            "wrappers_removal_ready": int(sum(r["removal_ready"] for r in wrapper_rows)),
+            "wrappers_total": wrappers_total,
+            "wrappers_with_failures": wrappers_blocked,
+            "wrappers_removal_ready": int(n_wrappers_removal_ready),
             "required_assets_total": int(len(required_asset_rows)),
             "required_assets_missing": int(sum(1 for r in required_asset_rows if r["exists"] == 0)),
             "required_inputs_total": int(len(required_input_checks)),
             "required_inputs_missing": int(sum(1 for v in required_input_checks.values() if not v)),
+        },
+        "wrapper_gate": {
+            "n_total": wrappers_total,
+            "n_removal_ready": int(n_wrappers_removal_ready),
+            "n_blocked": wrappers_blocked,
+            "strict_mode": bool(args.strict_removal_gate),
+            "policy": "wrappers_removed_required",
         },
         "required_inputs": required_input_checks,
         "required_inputs_check_mode": required_inputs_check_mode,
@@ -433,6 +486,9 @@ def main() -> int:
             "wrapper_audit_csv": str(out_wrapper_csv.relative_to(root)),
             "summary_json": str(out_summary.relative_to(root)),
         },
+        "status": {
+            "overall_ok": bool(overall_ok),
+        },
     }
     out_summary.write_text(json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
@@ -444,9 +500,12 @@ def main() -> int:
         "wrapper_help_ok",
         "canonical_help_ok",
         "wrapper_forward_marker_ok",
-        "reference_hits_nonexcluded",
-        "reference_hit_files",
+        "operational_ref_count",
+        "docs_ref_count",
+        "operational_ref_files",
+        "docs_ref_files",
         "removal_ready",
+        "blocking_reasons",
     ]
     with out_wrapper_csv.open("w", encoding="utf-8", newline="") as fh:
         writer = csv.DictWriter(fh, fieldnames=fieldnames)
@@ -454,9 +513,9 @@ def main() -> int:
         for row in wrapper_rows:
             writer.writerow(row)
 
-    if args.strict_removal_gate and not wrappers_removal_ready:
+    if args.strict_removal_gate and wrappers_blocked > 0:
         return 2
-    if wrappers_any_fail or not required_assets_ok or not required_inputs_ok or not contract_scripts_match:
+    if not overall_ok:
         return 1
     return 0
 

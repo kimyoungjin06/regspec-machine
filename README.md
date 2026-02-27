@@ -7,6 +7,8 @@
 ## Path Pointers (Current Canonical)
 - architecture: `docs/design/RegSpecMachine_UI_Agent_Architecture_WBS.md`
 - module docs index: `modules/03_regspec_machine/docs/README.md`
+- module specs index: `modules/03_regspec_machine/docs/specs/README.md`
+- investigations index: `modules/03_regspec_machine/docs/investigations/README.md`
 - module code: `modules/03_regspec_machine/regspec_machine/`
 - module tests: `modules/03_regspec_machine/tests/`
 - package manifest: `modules/03_regspec_machine/pyproject.toml`
@@ -47,4 +49,5 @@ UI_BASE_URL=http://127.0.0.1:8010/ui ./modules/03_regspec_machine/scripts/run_mo
 ```
 
 ## Compatibility
-- 기존 루트 경로(`scripts/modeling/run_phase_b_*.py`, `scripts/reporting/build_phase_b_regspec_dashboard.py`)는 wrapper로 유지된다.
+- 2026-02-26 기준 루트 레거시 wrapper(`scripts/modeling/run_phase_b_*.py`, `scripts/reporting/build_phase_b_regspec_dashboard.py`)는 제거되었다.
+- 실행/문서/계약은 모듈 canonical 경로만 사용한다.

@@ -1,33 +1,35 @@
 # Module 03 Docs Index
 
-## Final Canonical (Current)
-- `modules/03_regspec_machine/README.md`
-- `modules/03_regspec_machine/docs/ARCHITECTURE.md`
-- `modules/03_regspec_machine/docs/CONTRACTS.md`
-- `modules/03_regspec_machine/docs/LOCAL_CONSOLE_RUNBOOK.md`
+## Primary Entries
+- investigations: `modules/03_regspec_machine/docs/investigations/README.md`
+- specs: `modules/03_regspec_machine/docs/specs/README.md`
 
-## Final Reference
-- `modules/03_regspec_machine/docs/BEGINNER_GUIDE_KO.md`
-- `docs/design/RegSpecMachine_UI_Agent_Architecture_WBS.md`
-- `docs/operations/investigations/ModuleDevTeam_KeyFactorExplorer_Review_and_CodeDevPlan_2026-02-19.md`
-- `docs/operations/investigations/ModuleDev_BikardMachineScientist_ExternalExpert_Review_2026-02-19.md`
+## Canonical Specs
+- `modules/03_regspec_machine/docs/specs/ARCHITECTURE.md`
+- `modules/03_regspec_machine/docs/specs/CONTRACTS.md`
+- `modules/03_regspec_machine/docs/specs/LOCAL_CONSOLE_RUNBOOK.md`
+- `modules/03_regspec_machine/docs/specs/BEGINNER_GUIDE_KO.md`
+- `modules/03_regspec_machine/docs/specs/BASELINE_LOCK_2026-02-24.md`
 
-## Archived During Pre-v2 Curation (2026-02-24)
-- module local exploratory docs:
-  - `archive/modules/03_regspec_machine/docs/20260224_pre_v2_doc_curation/README.md`
-- operations superseded docs:
-  - `archive/docs/operations/investigations/20260224_regspec_machine_doc_curation/README.md`
-
-## Curation Plan
-- `docs/design/Module03_RegSpecMachine_DocumentCurationPlan_2026-02-24.md`
-- `modules/03_regspec_machine/docs/BASELINE_LOCK_2026-02-24.md`
+## Investigations (Template Lifecycle)
+- active lock: `modules/03_regspec_machine/docs/investigations/registry/active_stream_lock.yaml`
+- stream registry: `modules/03_regspec_machine/docs/investigations/registry/stream_registry.md`
+- active stream: `modules/03_regspec_machine/docs/investigations/streams/phase0_baseline/ongoing.md`
 
 ## Migration Tooling
 - `modules/03_regspec_machine/scripts/smoke_module_03_migration_paths.sh`
 - `modules/03_regspec_machine/scripts/check_module_03_contract_ci.py`
+- `modules/03_regspec_machine/scripts/create_module_03_dataset_dump.sh`
 
-## Canonical Scripts (v2)
+## Canonical Scripts
 - `modules/03_regspec_machine/scripts/modeling/run_phase_b_bikard_machine_scientist_scan.py`
 - `modules/03_regspec_machine/scripts/modeling/run_phase_b_regspec_preset.py`
 - `modules/03_regspec_machine/scripts/reporting/build_phase_b_regspec_dashboard.py`
-- `modules/03_regspec_machine/scripts/create_module_03_dataset_dump.sh`
+- `modules/03_regspec_machine/scripts/run_module_03.sh`
+
+## Compatibility
+- `modules/03_regspec_machine/docs/*.md`는 `docs/specs/*.md`로 연결되는 symlink를 유지한다.
+
+## Legacy
+- pre-v2 curation archive: `archive/modules/03_regspec_machine/docs/20260224_pre_v2_doc_curation/README.md`
+- operation archive snapshot: `archive/docs/operations/investigations/20260224_regspec_machine_doc_curation/README.md`

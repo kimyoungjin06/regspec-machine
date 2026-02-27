@@ -2227,14 +2227,10 @@ def _resolve_git_commit_for_lock(*, strict: bool) -> tuple[str, str]:
     module03_commit = get_git_commit(module03_repo)
     if module03_commit:
         return module03_commit, "module03_repo"
-    legacy_repo = ROOT / "analysis" / "modules" / "bikard_machine_scientist"
-    legacy_commit = get_git_commit(legacy_repo)
-    if legacy_commit:
-        return legacy_commit, "legacy_module_repo"
     if strict:
         raise ValueError(
             "strict lock mode requires non-empty git commit metadata; no git repo detected "
-            f"for root({ROOT}), module03({module03_repo}), or legacy module({legacy_repo})"
+            f"for root({ROOT}) or module03({module03_repo})"
         )
     return "", "missing"
 

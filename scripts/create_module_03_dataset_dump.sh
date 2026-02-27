@@ -102,10 +102,7 @@ add_mod_glob_files "__init__.py"
 add_mod_glob_files "regspec_machine/*.py"
 add_mod_glob_files "tests/*.py"
 
-# legacy wrappers and related runner utility
-add_glob_files "scripts/modeling/run_phase_b_bikard_machine_scientist_scan.py"
-add_glob_files "scripts/modeling/run_phase_b_regspec_preset.py"
-add_glob_files "scripts/reporting/build_phase_b_regspec_dashboard.py"
+# related runner utility
 add_glob_files "scripts/modeling/profile_phase_b_bikard_machine_scientist_ab.py"
 add_glob_files "scripts/README.md"
 

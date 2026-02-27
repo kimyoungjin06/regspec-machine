@@ -1,0 +1,3 @@
+decision_id,stream,accepted_at,status,doc,summary
+D1,phase0_baseline,2026-02-26,accepted,modules/03_regspec_machine/docs/investigations/streams/phase0_baseline/note.md,Paired nooption/singlex baseline gate required before exploration
+D2,phase0_baseline,2026-02-26,accepted,modules/03_regspec_machine/docs/investigations/streams/phase0_baseline/note.md,Restart stability tracked with baseline summary

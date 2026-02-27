@@ -1,0 +1,32 @@
+active_stream: phase0_baseline
+effective_date: 2026-02-26
+owner: modeling-team
+rationale: "nooption + singlex baseline 재현/게이트 확인이 현재 최우선 실행 스트림이다."
+
+active_stream_paths:
+  ongoing_doc: modules/03_regspec_machine/docs/investigations/streams/phase0_baseline/ongoing.md
+  note_doc: modules/03_regspec_machine/docs/investigations/streams/phase0_baseline/note.md
+  archive_dir: modules/03_regspec_machine/docs/investigations/streams/phase0_baseline/archive/
+
+bootstrap:
+  must_run:
+    - "RUN_ID=phase0_baseline TAG=phase-0 ./modules/03_regspec_machine/scripts/run_module_03.sh paired --exec"
+    - "TAG=phase-0 ./modules/03_regspec_machine/scripts/run_module_03.sh contract-ci --exec"
+  must_check:
+    - data/metadata/phase_b_bikard_machine_scientist_paired_preset_summary_phase0_baseline_paired.json
+    - data/metadata/module03_contract_ci_summary_phase-0.json
+  optional:
+    - "RUN_ID=phase0_baseline TAG=phase-0 ./modules/03_regspec_machine/scripts/run_module_03.sh overnight --exec"
+
+entry_conditions:
+  - "ongoing.md에 objective/must_run/must_check가 명시됨"
+  - "paired 요약 + contract summary 확인 가능"
+
+exit_conditions:
+  - "baseline 안정성 합의 후 phase2_contract로 handoff"
+  - "외부 의존성으로 실행 불가 시 blocked_external 전환"
+
+next_candidate_streams:
+  - phase0_quality
+  - phase2_contract
+  - phase3_release
